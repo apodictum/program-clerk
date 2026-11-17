@@ -11,7 +11,8 @@ export const HOOKS = new URL('../plugins/program-clerk/scripts/hooks/', import.m
 
 export const host = hostname().split('.')[0];
 
-export const scratch = () => realpathSync(mkdtempSync(join(tmpdir(), 'pc-test-')));
+// Windows' temporary folder can be an 8.3 short name (RUNNER~1); the native call gives the long one.
+export const scratch = () => realpathSync.native(mkdtempSync(join(tmpdir(), 'pc-test-')));
 
 export const removeAll = dir => rmSync(dir, {recursive: true, force: true});
 
@@ -30,12 +31,12 @@ export const git = (dir, ...args) =>
     }
   }).trim();
 
-/** A repository at `dir` with one commit and, unless null, an origin. */
+/** A repository at `dir` with one commit and, unless null, an origin; its top as git reports it. */
 export const makeRepo = (dir, remote = 'git@github.com:example/zz-lease-test.git') => {
   git(tmpdir(), 'init', '-q', dir);
   git(dir, 'commit', '-q', '--allow-empty', '-m', 'first');
   if (remote) git(dir, 'remote', 'add', 'origin', remote);
-  return slashed(realpathSync(dir));
+  return slashed(realpathSync(git(dir, 'rev-parse', '--show-toplevel')));
 };
 
 /** Environment for a hook: its own state folders, the server, and the key; nothing inherited. */

@@ -89,11 +89,13 @@ test('which answers a call sends again, how often, and the remembered outage', a
   t.notOk(existsSync(marker), 'an answer ends the outage');
   await server.close();
 
+  // Windows takes about 2 s to refuse a connection to a closed local port.
   const began = Date.now();
   answer = await call({base: DEAD, key: 'k'}, '/x', {
     method: 'POST',
     body: {},
-    deadline: deadline(),
+    deadline: Date.now() + 30000,
+    timeout: 10000,
     env
   });
   t.equal(answer, null, 'a refused connection has no answer');
