@@ -1,6 +1,7 @@
 // The text `/pickup` prints: how the last session finished, what is upcoming, what is open, the
 // outside items by title, and the notes changed since. Pure: the run gathers, this writes.
 
+import {ciText} from './brief.mjs';
 import {withoutControls} from './style.mjs';
 
 const BACKLOG_SHOWN = 10;
@@ -229,7 +230,7 @@ const externalLines = ({project: p, github}) => {
   if (github.problem !== undefined) lines.push(github.problem);
   if (github.repo === undefined) return lines;
   const {snapshot} = github;
-  const ci = snapshot.ci?.conclusion ?? 'unknown';
+  const ci = snapshot.ci ? ciText(snapshot.ci) : 'unknown';
   lines.push(
     `GitHub ${github.repo}: CI ${ci}${github.stored ? `, as stored ${day(snapshot.collected_at)}` : ''}.`
   );

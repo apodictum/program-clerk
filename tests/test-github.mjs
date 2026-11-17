@@ -85,7 +85,8 @@ const quietRoutes = (meta = {}) => ({
   [`${R}/releases`]: [],
   [`${R}/dependabot/alerts?state=open`]: [],
   [`${R}/code-scanning/alerts?state=open`]: [],
-  [`${R}/actions/runs?branch=main`]: {workflow_runs: []}
+  [`${R}/actions/runs?branch=main`]: {workflow_runs: []},
+  [`${R}/pulls?state=closed&base=main&sort=updated&direction=desc`]: []
 });
 
 const collect = (gh, extra = {}) =>
@@ -1022,6 +1023,131 @@ test("another repository's baseline counts as none", async t => {
   const same = await collect(gh, {baseline: {...baselineFixture(), repo: 'Example/Demo'}});
   t.equal(same.first_run, false);
   t.equal(same.replaced_baseline, undefined);
+});
+
+const ciRun = (event, conclusion, created_at, extra = {}) => ({
+  event,
+  name: 'CI',
+  status: 'completed',
+  conclusion,
+  created_at,
+  updated_at: created_at,
+  html_url: `${WEB}/actions/runs/${created_at}`,
+  ...extra
+});
+const closedPr = (number, merged_at, sha) => ({number, merged_at, head: {sha}});
+
+test("CI: a pull request merged after the default branch's last run stands in for it", async t => {
+  const routes = quietRoutes();
+  routes[`${R}/actions/runs?branch=main`] = {
+    workflow_runs: [
+      ciRun('dynamic', 'success', '2026-11-16T00:00:00Z'),
+      ciRun('pull_request', 'failure', '2026-11-15T12:00:00Z'),
+      ciRun('push', 'success', '2026-10-08T00:00:00Z')
+    ]
+  };
+  routes[`${R}/pulls?state=closed&base=main&sort=updated&direction=desc`] = [
+    closedPr(8, null, 'unmerged'),
+    closedPr(6, '2026-11-01T00:00:00Z', 'older'),
+    closedPr(7, '2026-11-15T00:00:00Z', 'merged'),
+    closedPr(5, '2026-10-01T00:00:00Z', 'before')
+  ];
+  routes[`${R}/actions/runs?event=pull_request&head_sha=merged`] = {
+    workflow_runs: [ciRun('pull_request', 'success', '2026-11-14T00:00:00Z')]
+  };
+  const {gh, calls} = ghStub(routes);
+  const entry = await collect(gh);
+  t.deepEqual(entry.errors, []);
+  t.deepEqual(entry.snapshot.ci, {
+    name: 'CI',
+    status: 'completed',
+    conclusion: 'success',
+    updated_at: '2026-11-14T00:00:00Z',
+    html_url: `${WEB}/actions/runs/2026-11-14T00:00:00Z`,
+    pull_request: {number: 7, merged_at: '2026-11-15T00:00:00Z'}
+  });
+  t.notOk(calls.some(args => /head_sha=(older|unmerged|before)/.test(args.at(-1))));
+});
+
+test("CI: a merged pull request with no run yields to an older one, then to the branch's", async t => {
+  const routes = quietRoutes();
+  routes[`${R}/actions/runs?branch=main`] = {
+    workflow_runs: [ciRun('push', 'failure', '2026-10-08T00:00:00Z')]
+  };
+  routes[`${R}/pulls?state=closed&base=main&sort=updated&direction=desc`] = [
+    closedPr(7, '2026-11-15T00:00:00Z', 'docs'),
+    closedPr(6, '2026-11-01T00:00:00Z', 'code')
+  ];
+  routes[`${R}/actions/runs?event=pull_request&head_sha=docs`] = {workflow_runs: []};
+  routes[`${R}/actions/runs?event=pull_request&head_sha=code`] = {
+    workflow_runs: [ciRun('pull_request', 'success', '2026-10-31T00:00:00Z')]
+  };
+  const {gh} = ghStub(routes);
+  t.equal((await collect(gh)).snapshot.ci.pull_request?.number, 6);
+
+  routes[`${R}/actions/runs?event=pull_request&head_sha=code`] = {workflow_runs: []};
+  const fallback = (await collect(ghStub(routes).gh)).snapshot.ci;
+  t.equal(fallback.conclusion, 'failure');
+  t.equal(fallback.pull_request, undefined);
+});
+
+test("CI: a commit's runs read as one, a workflow's newest run counting and a failure winning", async t => {
+  const routes = quietRoutes();
+  routes[`${R}/actions/runs?branch=main`] = {workflow_runs: []};
+  routes[`${R}/pulls?state=closed&base=main&sort=updated&direction=desc`] = [
+    closedPr(7, '2026-11-15T00:00:00Z', 'merged')
+  ];
+  const checks = ciRun('pull_request', 'success', '2026-11-14T00:00:02Z', {
+    name: 'Checks',
+    workflow_id: 2
+  });
+  const tests = ciRun('pull_request', 'failure', '2026-11-14T00:00:01Z', {
+    name: 'Tests',
+    workflow_id: 1
+  });
+  routes[`${R}/actions/runs?event=pull_request&head_sha=merged`] = {workflow_runs: [checks, tests]};
+  let ci = (await collect(ghStub(routes).gh)).snapshot.ci;
+  t.equal(ci.name, 'Tests');
+  t.equal(ci.conclusion, 'failure');
+
+  const rerun = {...tests, conclusion: 'success', created_at: '2026-11-14T01:00:00Z'};
+  routes[`${R}/actions/runs?event=pull_request&head_sha=merged`] = {
+    workflow_runs: [rerun, checks, tests]
+  };
+  ci = (await collect(ghStub(routes).gh)).snapshot.ci;
+  t.equal(ci.conclusion, 'success');
+
+  routes[`${R}/pulls?state=closed&base=main&sort=updated&direction=desc`] = [];
+  routes[`${R}/actions/runs?branch=main`] = {
+    workflow_runs: [
+      ciRun('push', 'success', '2026-11-16T00:00:02Z', {workflow_id: 2, head_sha: 'tip'}),
+      ciRun('push', 'failure', '2026-11-16T00:00:01Z', {workflow_id: 1, head_sha: 'tip'}),
+      ciRun('push', 'success', '2026-11-15T00:00:00Z', {workflow_id: 1, head_sha: 'before'})
+    ]
+  };
+  ci = (await collect(ghStub(routes).gh)).snapshot.ci;
+  t.equal(ci.conclusion, 'failure');
+  t.equal(ci.updated_at, '2026-11-16T00:00:01Z');
+});
+
+test("CI: the default branch's own run wins over a pull request merged before it", async t => {
+  const routes = quietRoutes();
+  routes[`${R}/actions/runs?branch=main`] = {
+    workflow_runs: [ciRun('push', 'success', '2026-11-15T00:01:00Z')]
+  };
+  routes[`${R}/pulls?state=closed&base=main&sort=updated&direction=desc`] = [
+    closedPr(7, '2026-11-15T00:00:00Z', 'merged')
+  ];
+  const {gh, calls} = ghStub(routes);
+  const entry = await collect(gh);
+  t.deepEqual(entry.errors, []);
+  t.equal(entry.snapshot.ci.updated_at, '2026-11-15T00:01:00Z');
+  t.equal(entry.snapshot.ci.pull_request, undefined);
+  t.notOk(calls.some(args => /head_sha=/.test(args.at(-1))));
+
+  routes[`${R}/actions/runs?branch=main`] = {workflow_runs: []};
+  routes[`${R}/pulls?state=closed&base=main&sort=updated&direction=desc`] = [];
+  t.equal((await collect(ghStub(routes).gh)).snapshot.ci, null);
 });
 
 const ALPHA_EVENTS = [

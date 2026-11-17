@@ -247,6 +247,18 @@ test('the GitHub line from the stored baseline', t => {
     `[pc] github example/p: 2 open (1 issues, 1 PRs); 1 advisories without CVE; alerts code scanning 2; CI success; collected ${hoursAgo(3).slice(0, 16).replace('T', ' ')} (3h ago)`
   );
   t.matchString(githubLine({...block, collected_at: hoursAgo(50)}, NOW), /\(2d ago\)$/);
+  const merged = {
+    conclusion: 'failure',
+    pull_request: {number: 7, merged_at: '2026-11-15T10:00:00Z'}
+  };
+  t.matchString(
+    githubLine({...block, ci: merged}, NOW),
+    /; CI failure, PR #7 merged 2026-11-15; collected /
+  );
+  t.matchString(
+    githubLine({...block, ci: {conclusion: null, status: 'queued'}}, NOW),
+    /; CI queued;/
+  );
   t.equal(githubLine(null, NOW), null);
 });
 

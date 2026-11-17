@@ -222,7 +222,7 @@ test('every section the digest owes, in order, from the log, the queue, and GitH
       github: {
         repo: 'o/r',
         snapshot: {
-          ci: {conclusion: 'success'},
+          ci: {conclusion: 'success', pull_request: {number: 6, merged_at: '2026-11-15T10:00:00Z'}},
           items: {7: {is_pr: true, title: 'Fix', state: 'open', author: 'ann', updated_at: 'x'}}
         },
         brief: 'new PR #7',
@@ -247,7 +247,7 @@ test('every section the digest owes, in order, from the log, the queue, and GitH
     '- A handoff waiting: a run-check from x',
     '- A note contradicts stack',
     'Drift:\ntwo new commits',
-    'GitHub o/r: CI success.',
+    'GitHub o/r: CI success, PR #6 merged 2026-11-15.',
     'Since the last look:\nnew PR #7',
     'Filed on the queue:\n- GitHub: o/r #7 Fix',
     '- PR #7 "Fix", by ann, 0 comments',

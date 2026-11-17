@@ -249,6 +249,24 @@ const latestComment = comments => {
 const COMMENT_SCAN_CAP = 60;
 const DAY_MS = 864e5;
 
+// A commit's workflows read as one: each workflow's newest run counts, and one that did not succeed
+// wins, so a passing style check never hides failing tests.
+const runOfCommit = runs => {
+  const latest = new Map();
+  for (const r of runs) if (!latest.has(r.workflow_id)) latest.set(r.workflow_id, r);
+  const each = [...latest.values()];
+  return each.find(r => r.conclusion !== 'success') ?? each[0];
+};
+
+const ciOf = (run, pull_request) => ({
+  name: run.name,
+  status: run.status,
+  conclusion: run.conclusion,
+  updated_at: run.updated_at,
+  html_url: run.html_url,
+  ...(pull_request ? {pull_request} : {})
+});
+
 const readRepo = async ({
   owner,
   name,
@@ -498,28 +516,33 @@ const readRepo = async ({
     code_scanning: await alertSet(`${R}/code-scanning/alerts?state=open`, a => a.rule?.severity)
   };
 
-  // The newest run on a default branch is often Dependabot's updater (`event: "dynamic"`).
-  const lastRun = await guard(
+  // The newest run on a default branch is often Dependabot's updater (`event: "dynamic"`), and a
+  // fork's pull request from a branch of the same name lists there too. A repository that tests
+  // pull requests alone has no run of its own, so a pull request merged since stands in.
+  const branch = encodeURIComponent(meta.default_branch);
+  const ci = await guard(
     'ci',
-    async () =>
-      (
-        (
-          await api(
-            `${R}/actions/runs?branch=${encodeURIComponent(meta.default_branch)}&per_page=10`
-          )
-        ).workflow_runs ?? []
-      ).find(r => r.event !== 'dynamic') ?? null,
+    async () => {
+      const runs = (
+        (await api(`${R}/actions/runs?branch=${branch}&per_page=10`)).workflow_runs ?? []
+      ).filter(r => r.event !== 'dynamic' && r.event !== 'pull_request');
+      const head = runs[0] ?? null;
+      const merged = (
+        await api(`${R}/pulls?state=closed&base=${branch}&sort=updated&direction=desc&per_page=10`)
+      )
+        .filter(p => p.merged_at && (!head || p.merged_at > head.created_at))
+        .sort((a, b) => b.merged_at.localeCompare(a.merged_at));
+      for (const p of merged) {
+        const prRuns =
+          (await api(`${R}/actions/runs?event=pull_request&head_sha=${p.head.sha}&per_page=20`))
+            .workflow_runs ?? [];
+        if (prRuns.length > 0)
+          return ciOf(runOfCommit(prRuns), {number: p.number, merged_at: p.merged_at});
+      }
+      return head ? ciOf(runOfCommit(runs.filter(r => r.head_sha === head.head_sha))) : null;
+    },
     null
   );
-  const ci = lastRun
-    ? {
-        name: lastRun.name,
-        status: lastRun.status,
-        conclusion: lastRun.conclusion,
-        updated_at: lastRun.updated_at,
-        html_url: lastRun.html_url
-      }
-    : null;
 
   const snapshot = {
     repo,

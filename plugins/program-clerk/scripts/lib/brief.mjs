@@ -144,6 +144,10 @@ export const briefLines = (brief, {base, now = Date.now()}) =>
     logLine(brief.latest_log)
   ].filter(Boolean);
 
+/** A collected CI run's state, and the pull request whose run it was, which may be weeks old. */
+export const ciText = ci =>
+  `${ci.conclusion ?? ci.status}${ci.pull_request ? `, PR #${ci.pull_request.number} merged ${String(ci.pull_request.merged_at).slice(0, 10)}` : ''}`;
+
 /** One line from the stored GitHub baseline, its age said, so a stale baseline reads as stale. */
 export const githubLine = (block, now = Date.now()) => {
   if (!block?.repo || !block.collected_at) return null;
@@ -160,7 +164,7 @@ export const githubLine = (block, now = Date.now()) => {
     `${open.length} open (${open.filter(i => !i.is_pr).length} issues, ${open.filter(i => i.is_pr).length} PRs)`,
     advisories > 0 ? `${advisories} advisories without CVE` : null,
     alerts.length ? `alerts ${alerts.join(', ')}` : null,
-    block.ci ? `CI ${block.ci.conclusion ?? block.ci.status}` : null,
+    block.ci ? `CI ${ciText(block.ci)}` : null,
     `collected ${String(block.collected_at).slice(0, 16).replace('T', ' ')} (${when})`
   ])}`;
 };
