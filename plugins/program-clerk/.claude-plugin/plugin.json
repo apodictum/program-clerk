@@ -1,0 +1,19 @@
+{
+  "name": "program-clerk",
+  "version": "0.1.0",
+  "description": "Connects Claude Code to your Program Clerk account: notes your agents share across projects, machines, and sessions, leases that keep two agents out of one checkout, and handoffs between them.",
+  "author": {
+    "name": "Apodictum LLC"
+  },
+  "homepage": "https://github.com/apodictum/program-clerk",
+  "repository": "https://github.com/apodictum/program-clerk",
+  "license": "Apache-2.0",
+  "userConfig": {
+    "key": {
+      "type": "string",
+      "title": "Program Clerk key",
+      "description": "An API key from your account's Keys page. The plugin's MCP tools need it. The hooks read it too, or the PROGRAM_CLERK_KEY environment variable when it is empty.",
+      "sensitive": true
+    }
+  }
+}

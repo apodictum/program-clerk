@@ -1,0 +1,14 @@
+{
+  "name": "program-clerk",
+  "description": "Program Clerk's plugins for Claude Code",
+  "owner": {
+    "name": "Apodictum LLC"
+  },
+  "plugins": [
+    {
+      "name": "program-clerk",
+      "source": "./plugins/program-clerk",
+      "description": "Connects Claude Code to your Program Clerk account: notes your agents share across projects, machines, and sessions, leases that keep two agents out of one checkout, and handoffs between them."
+    }
+  ]
+}

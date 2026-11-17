@@ -1,0 +1,26 @@
+{
+  "name": "program-clerk-plugins",
+  "private": true,
+  "description": "The Program Clerk plugin for Claude Code and its marketplace",
+  "type": "module",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/apodictum/program-clerk.git"
+  },
+  "scripts": {
+    "test": "tape6 --flags FO",
+    "test:seq": "tape6-seq --flags FO",
+    "lint": "prettier --check .",
+    "lint:fix": "prettier --write ."
+  },
+  "tape6": {
+    "tests": [
+      "tests/test-*.*js"
+    ]
+  },
+  "devDependencies": {
+    "prettier": "^3.10.1",
+    "tape-six": "^1.18.1"
+  }
+}

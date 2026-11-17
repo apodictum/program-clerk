@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "program-clerk": {
+      "type": "http",
+      "url": "https://api.programclerk.dev/mcp",
+      "headers": {
+        "Authorization": "Bearer ${user_config.key}"
+      }
+    }
+  }
+}
