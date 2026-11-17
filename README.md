@@ -19,8 +19,9 @@ You need Node.js and git on your `PATH`: the hooks run `node` and read your chec
 
 2. When Claude Code asks for the plugin's **Program Clerk key**, paste an API key from your
    account's Keys page. Claude Code keeps it in your system's credential store. The plugin's MCP
-   tools send this key. The hooks also read `PROGRAM_CLERK_KEY` when the option is empty, but the
-   tools don't.
+   tools send this key, and so do the hooks. The hooks also read `PROGRAM_CLERK_KEY` when the option
+   is empty, but the tools don't. A script the agent runs in its shell sees only
+   `PROGRAM_CLERK_KEY`: with the option alone, type `/pickup` yourself, and its hook has the key.
 3. To receive each release, turn on auto-update for the `program-clerk` marketplace in `/plugin`.
    Auto-update is off by default for marketplaces that Anthropic doesn't publish.
 4. Start a new session. Its first lines start with `[pc]` and say whether the session holds the
@@ -40,9 +41,37 @@ You need Node.js and git on your `PATH`: the hooks run `node` and read your chec
   notices.
 - **At session end**, it releases the session's leases and records what the session did, for the
   next session's brief.
+- **On `/pickup`** (or `/program-clerk:pickup`), it shows a digest of the project: how the last
+  session finished, what is upcoming and open, drift in the checkout since its recorded baseline,
+  the project's GitHub threads, and the notes changed since the last session. At a fresh start it
+  collects the checkout's GitHub repository in the background, so the digest arrives in about a
+  second.
 
 Every hook fails open: when the server is unreachable or the key is missing, a hook stays silent and
 the session goes on.
+
+## /pickup
+
+`/pickup` brings the agent up to speed on the project the session runs in, and stops: what to work
+on next is yours to say. `/program-clerk:pickup` always reaches it, should Claude Code ever add a
+command of the same name. The digest's sections:
+
+- **How we finished:** the last session log's title and summary, and any session that ended after it
+  with no log of its own.
+- **Upcoming:** the log's next steps, the queue's Active items, the plan or the first Backlog items,
+  and what entered the Backlog since the last session.
+- **Open:** the log's open questions, handoffs waiting, items that mirror a ticket, the Inbox, and
+  the checkout's drift: commits, tags, and npm publishes since its baseline, unpushed commits, the
+  working tree, and git tags without a publish.
+- **Outside:** the project's trackers, and for its GitHub repository the last CI result, what moved
+  since the last look, and each open thread's title.
+- **Changed since the last session:** the notes written since, by title.
+
+Reading GitHub needs the [`gh` command](https://cli.github.com/) signed in; without it, the digest
+says so and shows the last stored view. A new issue, pull request, or discussion a person opened,
+and a CVE that lands on an advisory, are filed on the project's queue in the section its GitHub
+tracker names, and the GitHub baseline then moves forward, so the next digest shows only what moved
+after it.
 
 ## Leases
 
@@ -84,12 +113,12 @@ Windows, the same holds for the PowerShell tool.
 
 ## Settings
 
-| Variable            | Use                                                                        |
-| ------------------- | -------------------------------------------------------------------------- |
-| `PROGRAM_CLERK_KEY` | The hooks' key, when the plugin's key option is empty.                     |
-| `PROGRAM_CLERK_URL` | The address the hooks call. The default is `https://api.programclerk.dev`. |
-| `XDG_CACHE_HOME`    | Where the hooks keep their cache (`program-clerk/` under it).              |
-| `XDG_STATE_HOME`    | Where the hooks keep claim tokens and unfinished releases.                 |
+| Variable            | Use                                                                                                  |
+| ------------------- | ---------------------------------------------------------------------------------------------------- |
+| `PROGRAM_CLERK_KEY` | The hooks' key when the plugin's key option is empty, and the only key a script the agent runs sees. |
+| `PROGRAM_CLERK_URL` | The address the hooks call. The default is `https://api.programclerk.dev`.                           |
+| `XDG_CACHE_HOME`    | Where the hooks keep their cache (`program-clerk/` under it).                                        |
+| `XDG_STATE_HOME`    | Where the hooks keep claim tokens and unfinished releases.                                           |
 
 Without the `XDG_` variables, the hooks use `~/.cache/program-clerk/` and
 `~/.local/state/program-clerk/`.

@@ -3,9 +3,10 @@
 ## Project identity
 
 The public marketplace for Program Clerk's Claude Code plugins, and the `program-clerk` plugin
-itself: the MCP connection to an account (`plugins/program-clerk/.mcp.json`) and the hooks every
-session runs (`plugins/program-clerk/hooks/hooks.json`). The server is a separate, private product;
-nothing here is server code.
+itself: the MCP connection to an account (`plugins/program-clerk/.mcp.json`), the hooks every
+session runs (`plugins/program-clerk/hooks/hooks.json`), and the skills
+(`plugins/program-clerk/skills/`). The server is a separate, private product; nothing here is server
+code.
 
 ## Critical rules
 
@@ -17,7 +18,13 @@ nothing here is server code.
   or no shell.
 - **Every hook fails open.** A missing key, an unreachable server, an answer it can't read, or a
   folder outside a checkout means no output and exit 0. The one block is the edit gate's exit 2 for
-  a lease another holder has. A hook's calls stop by `HOOK_BUDGET_MS`, under its 5 s timeout.
+  a lease another holder has. A hook's calls stop by `HOOK_BUDGET_MS`, under its 5 s timeout, with
+  two exceptions that read GitHub for `/pickup`: `digest-prepare.mjs` runs in the background at a
+  fresh start, and `digest.mjs` runs on the prompt `/pickup`, each with a 60 s timeout, since a
+  collection takes seconds. Every other prompt leaves `digest.mjs` before its modules load.
+- **A hook never waits out an outage; a script does.** The hooks' `call` tries once while another
+  call's outage mark stands. A script's `request` waits until the outage's first failure, which the
+  mark holds for every process, plus its window: 90 s run alone, 3 s under a hook.
 - **Lines a session reads start with `[pc]`.** No shipped text names the product's earlier name, a
   machine, or an internal decision; `tests/test-checkout.mjs` checks the shipped files and the
   documents.
@@ -39,10 +46,14 @@ nothing here is server code.
 ## Layout
 
 - `.claude-plugin/marketplace.json`: the marketplace.
-- `plugins/program-clerk/`: the plugin. `scripts/hooks/` holds one file per hook; `scripts/lib/`
-  holds what they share: `common.mjs` (settings, paths, the holder id), `http.mjs` (a call and its
-  retries), `checkout.mjs` (a checkout's top, remote, keys, project), `lease.mjs` (the mode, tokens,
-  claims, releases, and the lines), `brief.mjs`, `notices.mjs`, `transcript.mjs`.
+- `plugins/program-clerk/`: the plugin. `skills/` holds one folder per skill; `scripts/hooks/` holds
+  one file per hook; `scripts/digest.mjs` is `/pickup`'s script; `scripts/lib/` holds what they
+  share: `common.mjs` (settings, paths, the holder id), `http.mjs` (a hook's `call` and a script's
+  `request`, with their retries), `checkout.mjs` (a checkout's top, remote, keys, project),
+  `lease.mjs` (the mode, tokens, claims, releases, and the lines), `brief.mjs` (the session-start
+  lines), `notices.mjs`, `transcript.mjs`, and `/pickup`'s: `digest-run.mjs` (what it gathers and
+  does), `digest.mjs` (its text), `style.mjs`, `queue.mjs` (the project's queue and trackers),
+  `drift.mjs` (a checkout against its baseline), `github.mjs` (a repository collected from GitHub).
 - `tests/`: tape-six tests. `helpers.mjs` runs a hook as Claude Code does and serves a fake API that
   keeps leases by the server's rules.
 

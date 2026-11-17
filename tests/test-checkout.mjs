@@ -63,8 +63,11 @@ test('no text the plugin ships or the documents say names the old product', t =>
   for (const file of shipped()) {
     const lines = readFileSync(file, 'utf8').split(/\r?\n/);
     lines.forEach((line, i) => {
-      // The API's route for a note's text keeps its name.
-      const rest = line.replaceAll('\\/vault\\/', '');
+      // The API's route for a note's text and the queue's tracker kind on the wire keep the name.
+      const rest = line
+        .replaceAll('\\/vault\\/', '')
+        .replaceAll('`/vault/', '')
+        .replaceAll("'vault'", '');
       if (/vault/i.test(rest)) found.push(`${relative(ROOT, file)}:${i + 1}`);
     });
   }
