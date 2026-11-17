@@ -14,15 +14,26 @@ const SESSION = '5eed5eed-0000-4000-8000-000000000001';
 /** A server whose counts the test sets: `by` the suggestion kinds, `unenriched` the lint's. */
 const setUp = async () => {
   const dir = scratch();
-  const world = {by: {}, unenriched: 0, oversized: 0, pending: {}, failing: false};
+  const world = {
+    by: {},
+    unenriched: 0,
+    backfill: [],
+    oversized: 0,
+    oversizedIds: [],
+    pending: {},
+    failing: false
+  };
   const server = await fakeServer({
     'GET /system/lint': () => ({
       body: {
         ok: !world.failing,
         total_issues: world.failing ? 1 : 0,
-        coverage: {enrichment: {unenriched: world.unenriched, unenriched_records: []}},
+        coverage: {enrichment: {unenriched: world.unenriched, unenriched_records: world.backfill}},
         checks: {
-          oversized_summaries: {count: world.oversized, samples: []},
+          oversized_summaries: {
+            count: world.oversized,
+            samples: world.oversizedIds.map(id => ({id}))
+          },
           broken_links: {count: world.failing ? 1 : 0, samples: world.failing ? ['a.md'] : []},
           size_bound: {
             count: 1,
@@ -74,14 +85,14 @@ test('options: kinds by name or alias, and a TypeError for anything else', t => 
   t.throws(() => optionsOf(['begin', '--include-destructive']), /unknown option/);
 });
 
-test('a dry run measures and writes nothing; enrichment and compaction are never dispatched', async t => {
+test('a dry run measures and writes nothing', async t => {
   const {env, server, world, sweep, done} = await setUp();
   try {
     world.by = {new_tag: 3, compaction_candidate: 2};
     world.unenriched = 5;
-    const plan = await sweep(['begin', '--dry-run']);
-    t.deepEqual(plan.would_run, ['new_tag']);
-    t.notOk(plan.action_set.includes('enrich_backfill'));
+    const plan = await sweep(['begin', '--dry-run', '--exclude=duplicate']);
+    t.deepEqual(plan.would_run, ['enrich_backfill', 'new_tag', 'compaction_candidate']);
+    t.notOk(plan.action_set.includes('duplicate'));
     t.notOk(
       server.requests.some(r => r.method === 'POST'),
       'no one-shot on a dry run'
@@ -96,7 +107,6 @@ test('begin runs the one-shots, then plans the first stage with work; next moves
   const {env, server, world, sweep, done} = await setUp();
   try {
     world.by = {new_tag: 150, edge_type: 2, report: 0};
-    world.unenriched = 4;
     let plan = await sweep(['begin']);
     const posts = server.requests.filter(r => r.method === 'POST').map(r => r.path);
     t.deepEqual(posts.slice(-1), ['/maintenance/check-edges'], 'check-edges after the others');
@@ -128,12 +138,75 @@ test('begin runs the one-shots, then plans the first stage with work; next moves
     t.equal(plan.status, 'done', 'a count that did not drop is floored, and nothing is left');
     t.deepEqual(plan.floors, {edge_type: 2});
     t.equal(plan.reason, 'converged');
-    t.deepEqual(plan.not_dispatched, ['enrich_backfill']);
-    t.deepEqual(plan.residue, {enrich_backfill: 4, edge_type: 2});
+    t.deepEqual(plan.residue, {edge_type: 2});
     t.match(plan.lint, {ok: true, failing: {}});
     t.deepEqual(plan.size_bound, [
       {file_path: 'big.md', role: 'x', bytes: 9, bound: 1, remedy: 'split'}
     ]);
+  } finally {
+    await done();
+  }
+});
+
+test('enrichment comes first: backfill chunked, stale frozen at begin and sharded, oversized one an agent', async t => {
+  const {world, sweep, done} = await setUp();
+  try {
+    world.unenriched = 120;
+    world.backfill = Array.from({length: 120}, (_, i) => ({file_path: `n/${i}.md`}));
+    world.by = {agent_enrichment_stale: 5, new_tag: 1};
+    world.pending = {
+      agent_enrichment_stale: [
+        ...Array.from({length: 5}, (_, i) => ({
+          id: `s${i}`,
+          payload: {file_path: `s/${i}.md`},
+          created: '2000-01-01T00:00:00Z'
+        })),
+        {id: 'late', payload: {file_path: 's/late.md'}, created: '2999-01-01T00:00:00Z'}
+      ]
+    };
+    world.oversized = 2;
+    world.oversizedIds = ['r1', 'r2'];
+    const plan = await sweep(['begin']);
+    t.match(plan, {status: 'dispatch', stage: 1});
+    const byKind = Object.fromEntries(plan.dispatch.map(e => [e.kind, e]));
+    t.deepEqual(Object.keys(byKind), ['enrich_backfill', 'enrich_stale', 'enrich_oversized']);
+    t.equal(byKind.enrich_backfill.pass, 'enrich');
+    t.deepEqual(
+      byKind.enrich_backfill.agents.map(a => a.records),
+      [50, 50, 20],
+      'a backfill past a hundred notes goes out in chunks of fifty'
+    );
+    t.equal(
+      readFileSync(byKind.enrich_backfill.agents[2].records_file, 'utf8').split(/\r?\n/)[0],
+      'n/100.md'
+    );
+    t.deepEqual(
+      byKind.enrich_stale.agents.map(a => a.records),
+      [4, 1],
+      'four stale notes an agent, the one filed after begin left out'
+    );
+    t.match(byKind.enrich_oversized.agents, [
+      {mode: 'refresh', outline: true, records: 1},
+      {mode: 'refresh', outline: true, records: 1}
+    ]);
+    t.equal(readFileSync(byKind.enrich_oversized.agents[1].records_file, 'utf8'), 'r2\n');
+    t.equal(plan.estimate_s, null, 'a backfill has no measured rate, so the plan has no estimate');
+  } finally {
+    await done();
+  }
+});
+
+test('compaction lists its candidate folders for the main session, with no agents', async t => {
+  const {world, sweep, done} = await setUp();
+  try {
+    world.by = {compaction_candidate: 1};
+    world.pending = {
+      compaction_candidate: [{id: 'c1', payload: {folder: 'projects/p/logs'}, created: 'x'}]
+    };
+    const plan = await sweep(['begin']);
+    t.match(plan.dispatch, [{kind: 'compaction_candidate', pass: 'compact', agents: []}]);
+    t.deepEqual(plan.dispatch[0].candidates, [{folder: 'projects/p/logs'}]);
+    t.equal(plan.estimate_s, null);
   } finally {
     await done();
   }

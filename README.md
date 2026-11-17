@@ -116,13 +116,14 @@ written, and reports what moved in the checkout since.
 
 ## /sweep
 
-The server files suggestions as notes change: a new tag to place, a tag to add, a link to type, two
-notes that may be duplicates, a report on the account's shape. `/sweep` drains them. Its driver,
-`scripts/sweep/sweep.mjs`, measures every queue live, runs the one-shot cleanups, and plans each
-stage in order; the agent dispatches the sub-agents a plan names, each claiming its own batch, and
-asks the driver for the next plan until it says done. `/sweep <pass>` runs one pass: `tags`,
-`edges`, `duplicates`, or `reports`. The summary names every change by note, and what was left for
-you: an item a pass found ambiguous stays pending, and the summary lists it.
+The server files suggestions as notes change: a summary to write or refresh, a new tag to place, a
+tag to add, a link to type, two notes that may be duplicates, a folder old enough to compact, a
+report on the account's shape. `/sweep` drains them. Its driver, `scripts/sweep/sweep.mjs`, measures
+every queue live, runs the one-shot cleanups, and plans each stage in order; the agent dispatches
+the sub-agents a plan names, each claiming its own batch, compacts the folders itself, and asks the
+driver for the next plan until it says done. `/sweep <pass>` runs one pass: `enrich`, `tags`,
+`edges`, `duplicates`, `compact`, or `reports`. The summary names every change by note, and what was
+left for you: an item a pass found ambiguous stays pending, and the summary lists it.
 
 ## Leases
 

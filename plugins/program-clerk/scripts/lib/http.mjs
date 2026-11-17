@@ -157,7 +157,7 @@ const repeatable = (answer, failure, isRead) => {
  * One call for a script a person waits on, not a hook. A 429 naming its Retry-After is sent again
  * after it, for five minutes in all. An outage (what `call` sends again) is waited out until its
  * first failure, which the mark holds for every process, plus `outageMs`, so calls that meet one
- * restart all recover. Resolves to {status, text}, or null with no answer.
+ * restart all recover. Resolves to {status, text, headers}, or null with no answer.
  */
 export const request = async (
   conn,
@@ -166,6 +166,7 @@ export const request = async (
     method = 'GET',
     body,
     contentType,
+    headers: extra = {},
     outageMs = OUTAGE_WAIT_MS,
     timeout = 30_000,
     env = process.env,
@@ -174,7 +175,7 @@ export const request = async (
   } = {}
 ) => {
   const isRead = method === 'GET' || method === 'HEAD';
-  const headers = {authorization: `Bearer ${conn.key}`, 'user-agent': USER_AGENT};
+  const headers = {...extra, authorization: `Bearer ${conn.key}`, 'user-agent': USER_AGENT};
   let payload;
   if (body !== undefined) {
     payload = typeof body === 'string' ? body : JSON.stringify(body);
@@ -195,7 +196,7 @@ export const request = async (
         body: payload,
         signal: AbortSignal.timeout(timeout)
       });
-      answer = {status: response.status, text: await response.text()};
+      answer = {status: response.status, text: await response.text(), headers: response.headers};
       after = Number(response.headers.get('retry-after')) * 1000 || 0;
     } catch (error) {
       failure = error;

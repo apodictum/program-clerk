@@ -2,10 +2,10 @@
 name: sweep
 description:
   Runs Program Clerk's maintenance over the account's notes. It splits notes past their size bound,
-  runs the one-shot cleanups, then drains each review queue with sub-agents (new tags, tag
-  suggestions, link types, duplicates, and the server's reports), and reports what it changed and
-  what it left. Use when the person types /sweep, /sweep <pass>, or asks to clean up or maintain the
-  notes.
+  runs the one-shot cleanups, then drains each queue with sub-agents (summaries to write or refresh,
+  new tags, tag suggestions, link types, duplicates, old folders to compact, and the server's
+  reports), and reports what it changed and what it left. Use when the person types /sweep, /sweep
+  <pass>, or asks to clean up or maintain the notes.
 ---
 
 # /sweep
@@ -17,15 +17,18 @@ plan says done. The judgment is the sub-agents'.
 
 ```text
 /sweep                         every pass
-/sweep <pass>                  one pass: tags, edges, duplicates, or reports
+/sweep <pass>                  one pass: enrich, tags, edges, duplicates, compact, or reports
 /sweep --dry-run               what would run, with live counts; writes nothing
 /sweep --exclude=duplicate     every pass but these kinds
 /sweep --max-passes=N          passes of one kind in a round (default 5)
 /sweep --max-rounds=N          rounds of the whole sweep (default 5)
 ```
 
-A pass maps to the driver's kinds: `tags` is `--include=new_tag,tag_suggestion`, `edges` is
-`--include=edge_type`, `duplicates` is `--include=duplicate`, and `reports` is `--include=report`.
+A pass maps to the driver's kinds: `enrich` is
+`--include=enrich_backfill,enrich_stale,enrich_oversized`, `tags` is
+`--include=new_tag,tag_suggestion`, `edges` is `--include=edge_type`, `duplicates` is
+`--include=duplicate`, `compact` is `--include=compaction_candidate`, and `reports` is
+`--include=report`.
 
 ## What a sweep does
 
@@ -33,13 +36,12 @@ A pass maps to the driver's kinds: `tags` is `--include=new_tag,tag_suggestion`,
 | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Before `begin`               | Split each note past its size bound, and regroup appended pieces (step 0 below).                                                                                             |
 | One-shots                    | `begin` runs them itself: orphaned embeddings removed, missing ones embedded, expired session logs removed, unused tags removed, and stored links checked against the notes. |
+| Summaries                    | The `enrich` pass: a summary block written for a note with none, refreshed where it no longer matches its note, and restated from the headings where it grew past its bound. |
 | New tags                     | The `tags` pass: an unknown tag becomes canonical, an alias, or a typo fixed.                                                                                                |
 | Tag suggestions ∥ link types | The `tags` pass accepts or rejects a suggested tag; the `edges` pass types a link that reads only as a citation.                                                             |
 | Duplicates                   | The `duplicates` pass: reject, relate, or flag a merge for the main session.                                                                                                 |
+| Compaction                   | The `compact` pass, yours, not a sub-agent's: a folder's oldest pieces summarized into one note, the pieces archived.                                                        |
 | Reports                      | The `reports` pass, last, so a backlog report is judged against the queue the sweep left.                                                                                    |
-
-The enrichment of notes' summaries and the compaction of old folder pieces come in a later version;
-the driver measures them and lists them under `not_dispatched`.
 
 A sweep never touches the raw inbox, which a person marks ready for ingesting, or an archive
 suggestion, which asks a person about one note.
@@ -78,10 +80,13 @@ each claims its own batch under its holder, so their batches never overlap.
 2. **Dispatch** every agent entry of the plan's `dispatch` list in one message, one Agent call each,
    `subagent_type: "program-clerk:sweep"`, labeled with its kind. The prompt: the entry's `pass`
    names the reference to follow, `${CLAUDE_PLUGIN_ROOT}/skills/sweep/references/<pass>.md`, whose
-   sub-agent prompt takes the agent's `holder` and `limit`, its `triage_kind` as `<kind>`, and, for
-   the `reports` pass, the project this session works in as `<project>`, the queue an accepted
-   report's follow-up goes on. Say the plan's `estimate_s` and the running `elapsed_s` when you
-   dispatch.
+   sub-agent prompt takes the agent's fields: its `holder`; its `records_file` or its `limit`; for
+   the `enrich` pass its `mode` and `outline`; for a triage pass its `triage_kind` as `<kind>`; and,
+   for the `reports` pass, the project this session works in as `<project>`, the queue an accepted
+   report's follow-up goes on. An entry with `candidates` and no agents is compaction: follow
+   `references/compact.md` yourself for each folder it lists, and treat a folder whose `plan` exits
+   3, another holder having one of its pieces, as skipped, naming the folder and the holder. Say the
+   plan's `estimate_s` and the running `elapsed_s` when you dispatch.
 
 3. **`next`** after every agent returns:
    `node "${CLAUDE_PLUGIN_ROOT}/scripts/sweep/sweep.mjs" next`. It measures again, floors a kind
@@ -93,10 +98,10 @@ each claims its own batch under its holder, so their batches never overlap.
 4. **Summary,** from the done report:
    - `reason` (`converged`, `no_change_round`, or `max_rounds`), `rounds`, `floors`, `residue`, and
      `skipped`: what is left, and why.
-   - Every change by name, from the agents' reports and the one-shots: each merge as
-     `removed path → kept path`; each log `expire_logs` removed, by path and age; each tag `gc_tags`
-     removed, by name; each note `check_edges` repaired, when it says `repaired: true`. A removal
-     stated only as a count is one nobody can trace later.
+   - Every change by name, from the agents' reports, your compactions, and the one-shots: each merge
+     as `removed path → kept path`; each folder compacted, by name; each log `expire_logs` removed,
+     by path and age; each tag `gc_tags` removed, by name; each note `check_edges` repaired, when it
+     says `repaired: true`. A removal stated only as a count is one nobody can trace later.
    - `lint`: when its `ok` is false, each check in `failing` with its count and samples, since the
      sweep drains none of them.
    - `size_bound`, `ungrouped_pieces`, and `small_splits`: the notes step 0 left past their bound,

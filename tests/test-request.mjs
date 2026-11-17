@@ -113,3 +113,26 @@ test('no server: a read waits out its window, then answers null', async t => {
     );
   });
 });
+
+test("a request's own headers go out beside the key, and the answer carries the response's", async t => {
+  const seen = [];
+  const server = http.createServer((req, res) => {
+    seen.push(req.headers);
+    res.writeHead(200, {'content-type': 'application/json', etag: '"abc"'});
+    res.end('{}');
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  await withHome(async env => {
+    const conn = {base: `http://127.0.0.1:${server.address().port}`, key: 'k'};
+    const answer = await request(conn, '/x', {
+      method: 'PUT',
+      body: {},
+      headers: {'if-match': '"abc"', authorization: 'Bearer other'},
+      env
+    });
+    t.equal(answer.headers.get('etag'), '"abc"');
+    t.equal(seen[0]['if-match'], '"abc"');
+    t.equal(seen[0].authorization, 'Bearer k', "a header of the caller's never replaces the key");
+  });
+  await new Promise(resolve => server.close(resolve));
+});

@@ -51,13 +51,6 @@ export const PASS_FOR = {
   compaction_candidate: 'compact',
   report: 'reports'
 };
-// Measured and reported, but never dispatched until their passes are in the plugin.
-const NOT_YET = new Set([
-  'enrich_backfill',
-  'enrich_stale',
-  'enrich_oversized',
-  'compaction_candidate'
-]);
 
 const PER_AGENT = {enrich_stale: 4, enrich_oversized: 1};
 const MAX_STALE_AGENTS = 6;
@@ -207,8 +200,7 @@ export const run = async (
     return items;
   };
 
-  const actionSet = () =>
-    (opts.include ?? ALL_KINDS).filter(k => !opts.exclude.includes(k) && !NOT_YET.has(k));
+  const actionSet = () => (opts.include ?? ALL_KINDS).filter(k => !opts.exclude.includes(k));
 
   // The nonce keeps two sweeps of one day apart: their holders name worksheet and report files.
   const holderFor = (state, kind, i) =>
@@ -348,7 +340,6 @@ export const run = async (
         floors: state.floors,
         skipped: state.skipped ?? {},
         residue: Object.fromEntries(ALL_KINDS.filter(k => counts[k] > 0).map(k => [k, counts[k]])),
-        not_dispatched: ALL_KINDS.filter(k => NOT_YET.has(k) && counts[k] > 0),
         one_shots: state.one_shots
       };
     }
