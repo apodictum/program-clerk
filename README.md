@@ -60,6 +60,11 @@ You need Node.js and git on your `PATH`: the hooks run `node` and read your chec
 - **On `/sweep`** (or `/program-clerk:sweep`), the agent runs the account's maintenance: it splits
   notes past their size bound, runs the server's one-shot cleanups, and drains the review queues
   with sub-agents of the plugin's `program-clerk:sweep` type.
+- **On `/ingest`**, the agent compiles the raw inbox's ready notes into topic notes, project notes,
+  and queue items, and archives each source.
+- **On `/pc`**, the agent shows the account's status, and with a subcommand answers a question from
+  the notes (`query`), reports the checkout's drift (`check`), runs both lints (`lint`), or declares
+  where a project's work is tracked (`trackers`).
 
 Every hook fails open: when the server is unreachable or the key is missing, a hook stays silent and
 the session goes on.
@@ -124,6 +129,20 @@ the sub-agents a plan names, each claiming its own batch, compacts the folders i
 driver for the next plan until it says done. `/sweep <pass>` runs one pass: `enrich`, `tags`,
 `edges`, `duplicates`, `compact`, or `reports`. The summary names every change by note, and what was
 left for you: an item a pass found ambiguous stays pending, and the summary lists it.
+
+## /ingest and /pc
+
+`/ingest` works the raw inbox: a note you mark `ready: true` is compiled into the notes it feeds,
+leased while it is read, and archived after; a draft waits. `/pc` gathers the account's other
+commands:
+
+| Command                | What it does                                                                                                                                                         |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/pc`                  | The account's status: notes by folder, the latest changes, and the lint's warnings.                                                                                  |
+| `/pc query <question>` | An answer from the notes, citing them, and a note under `queries/` when the answer is worth keeping.                                                                 |
+| `/pc check [--update]` | The checkout against the baseline `/wrap` recorded, with `scripts/check.mjs`; `--update` records the checkout as the new baseline.                                   |
+| `/pc lint`             | The server's integrity lint and the hygiene lint, `scripts/lint.mjs`: frontmatter, empty bodies, broken links, link density, retention, duplicates, and queue items. |
+| `/pc trackers`         | Where a project's work is tracked, declared one tracker at a time and written to its `trackers:` list.                                                               |
 
 ## Leases
 

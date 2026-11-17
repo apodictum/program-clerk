@@ -53,20 +53,21 @@ code.
 - `.claude-plugin/marketplace.json`: the marketplace.
 - `plugins/program-clerk/`: the plugin. `skills/` holds one folder per skill; `scripts/hooks/` holds
   one file per hook; `scripts/digest.mjs` is `/pickup`'s script, `scripts/wrap.mjs` `/wrap`'s writes
-  (the log, its line, the baseline), and `scripts/queue.mjs` the `queue` skill's commands;
-  `scripts/lib/` holds what they share: `common.mjs` (settings, paths, the holder id), `http.mjs` (a
-  hook's `call` and a script's `request`, with their retries), `checkout.mjs` (a checkout's top,
-  remote, keys, project), `lease.mjs` (the mode, tokens, claims, releases, and the lines),
-  `brief.mjs` (the session-start lines), `notices.mjs`, `transcript.mjs`, and `/pickup`'s:
-  `digest-run.mjs` (what it gathers and does), `digest.mjs` (its text), `style.mjs`, `queue.mjs`
-  (the project's queue and trackers), `drift.mjs` (a checkout against its baseline, and the
-  baseline's write), `github.mjs` (a repository collected from GitHub), and the scripts' logic:
-  `wrap.mjs`, `queue-cli.mjs`, and `/sweep`'s `sweep.mjs` (the driver), `triage.mjs` (the review
-  passes' harness), `tag-distance.mjs`, `enrich.mjs` with `worksheet-view.mjs` (the summaries'
-  harness), `compact.mjs` (a folder's compaction), and `sweep-files.mjs` (the session's working
-  folder). A script under `scripts/` or `scripts/sweep/` is a thin entry that imports its logic from
-  `lib/` and calls it, with no `import.meta.main` guard, which Node 22 lacks before 22.18. `agents/`
-  holds `sweep.md`, the sub-agent `/sweep` dispatches.
+  (the log, its line, the baseline), `scripts/queue.mjs` the `queue` skill's commands, and
+  `scripts/check.mjs` and `scripts/lint.mjs` `/pc check`'s and `/pc lint`'s (logic in
+  `lib/check.mjs` and `lib/hygiene.mjs`); `scripts/lib/` holds what they share: `common.mjs`
+  (settings, paths, the holder id), `http.mjs` (a hook's `call` and a script's `request`, with their
+  retries), `checkout.mjs` (a checkout's top, remote, keys, project), `lease.mjs` (the mode, tokens,
+  claims, releases, and the lines), `brief.mjs` (the session-start lines), `notices.mjs`,
+  `transcript.mjs`, and `/pickup`'s: `digest-run.mjs` (what it gathers and does), `digest.mjs` (its
+  text), `style.mjs`, `queue.mjs` (the project's queue and trackers), `drift.mjs` (a checkout
+  against its baseline, and the baseline's write), `github.mjs` (a repository collected from
+  GitHub), and the scripts' logic: `wrap.mjs`, `queue-cli.mjs`, and `/sweep`'s `sweep.mjs` (the
+  driver), `triage.mjs` (the review passes' harness), `tag-distance.mjs`, `enrich.mjs` with
+  `worksheet-view.mjs` (the summaries' harness), `compact.mjs` (a folder's compaction), and
+  `sweep-files.mjs` (the session's working folder). A script under `scripts/` or `scripts/sweep/` is
+  a thin entry that imports its logic from `lib/` and calls it, with no `import.meta.main` guard,
+  which Node 22 lacks before 22.18. `agents/` holds `sweep.md`, the sub-agent `/sweep` dispatches.
 - `tests/`: tape-six tests. `helpers.mjs` runs a hook as Claude Code does and serves a fake API that
   keeps leases by the server's rules.
 

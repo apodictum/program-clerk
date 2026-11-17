@@ -73,3 +73,23 @@ test('no text the plugin ships or the documents say names the old product', t =>
   }
   t.deepEqual(found, []);
 });
+
+// Claude Code drops a skill's whole frontmatter when it does not parse, silently: a `: ` inside an
+// unquoted value's continuation lines reads as a new key.
+test("a skill's or an agent's frontmatter has no `: ` in an unquoted value's continuation lines", t => {
+  const found = [];
+  const pages = files(join(ROOT, 'plugins')).filter(file =>
+    /[\\/](skills[\\/][^\\/]+[\\/]SKILL|agents[\\/][^\\/]+)\.md$/.test(file)
+  );
+  t.ok(pages.length >= 7, 'every skill and agent is read');
+  for (const file of pages) {
+    const lines = readFileSync(file, 'utf8').split(/\r?\n/);
+    const end = lines.indexOf('---', 1);
+    lines.slice(1, end).forEach((line, i) => {
+      if (/^\s+\S/.test(line) && !/^\s+["']/.test(line) && /: /.test(line)) {
+        found.push(`${relative(ROOT, file)}:${i + 2}`);
+      }
+    });
+  }
+  t.deepEqual(found, []);
+});
