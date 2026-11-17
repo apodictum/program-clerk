@@ -514,3 +514,23 @@ test('the plugin option is the key, and PROGRAM_CLERK_KEY when the option is emp
   await server.close();
   removeAll(home);
 });
+
+test("every call names the plugin's version", async t => {
+  const {version} = JSON.parse(
+    readFileSync(
+      new URL('../plugins/program-clerk/.claude-plugin/plugin.json', import.meta.url),
+      'utf8'
+    )
+  );
+  t.matchString(version, /^\d+\.\d+\.\d+/);
+  const home = scratch();
+  const repo = makeRepo(join(home, 'repo'));
+  const server = await fakeServer(settingsRoute(undefined));
+  const env = hookEnv(home, server.base);
+  await runHook('lease-claim.mjs', start(repo, S1), env);
+  await runHook('lease-release.mjs', start(repo, S1), env);
+  t.ok(server.requests.length >= 3, 'the claim, the setting, the list, and the release');
+  t.deepEqual([...new Set(server.requests.map(q => q.agent))], [`program-clerk-plugin/${version}`]);
+  await server.close();
+  removeAll(home);
+});

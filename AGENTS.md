@@ -26,6 +26,8 @@ nothing here is server code.
   `<remote>` is `normalizeRemote` over `git remote get-url origin`, `<host>` is the short host name,
   `<path>` is the checkout's real path with forward slashes. The handoff address is `repo:<remote>`
   in both modes.
+- **Every call sends `User-Agent: program-clerk-plugin/<version>`**, the version read from
+  `plugin.json`: bump the manifest's version with a release, and the server counts calls by it.
 - **Split text on `/\r?\n/`**, never on `'\n'`: the tests run on Windows.
 
 ## Code style

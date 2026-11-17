@@ -1,4 +1,4 @@
-import {existsSync, mkdirSync, rmSync, writeFileSync} from 'node:fs';
+import {existsSync, mkdirSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {setTimeout as sleep} from 'node:timers/promises';
 import {cacheDir} from './common.mjs';
@@ -18,6 +18,18 @@ const delaysOf = (env = process.env) => {
     .filter(Boolean)
     .map(Number);
 };
+
+const versionOf = () => {
+  try {
+    const manifest = new URL('../../.claude-plugin/plugin.json', import.meta.url);
+    return JSON.parse(readFileSync(manifest, 'utf8')).version || 'unknown';
+  } catch {
+    return 'unknown';
+  }
+};
+
+// The server's usage record counts calls by this, so a retired form waits for old plugins to stop.
+export const USER_AGENT = `program-clerk-plugin/${versionOf()}`;
 
 export const outageMarker = (env = process.env) => join(cacheDir(env), 'outage');
 
@@ -53,7 +65,7 @@ export const call = async (
   {method = 'GET', body, read, deadline, timeout = 2000, env = process.env} = {}
 ) => {
   const isRead = read ?? (method === 'GET' || method === 'HEAD');
-  const headers = {authorization: `Bearer ${conn.key}`};
+  const headers = {authorization: `Bearer ${conn.key}`, 'user-agent': USER_AGENT};
   let payload;
   if (body !== undefined) {
     payload = typeof body === 'string' ? body : JSON.stringify(body);
