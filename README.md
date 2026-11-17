@@ -57,6 +57,9 @@ You need Node.js and git on your `PATH`: the hooks run `node` and read your chec
   `/pickup`.
 - **The `queue` skill** gives the agent the project's queue: list, file, move, and archive items,
   and show where the project's work is tracked.
+- **On `/sweep`** (or `/program-clerk:sweep`), the agent runs the account's maintenance: it splits
+  notes past their size bound, runs the server's one-shot cleanups, and drains the review queues
+  with sub-agents of the plugin's `program-clerk:sweep` type.
 
 Every hook fails open: when the server is unreachable or the key is missing, a hook stays silent and
 the session goes on.
@@ -110,6 +113,16 @@ file with the log's title, summary, and body, and runs the plugin's `wrap.mjs` o
 writes the log, adds its line to the project's month of sessions, and records the checkout's state
 in `projects/<project>/state.md`. The next `/pickup` shows the log's open items and next steps as
 written, and reports what moved in the checkout since.
+
+## /sweep
+
+The server files suggestions as notes change: a new tag to place, a tag to add, a link to type, two
+notes that may be duplicates, a report on the account's shape. `/sweep` drains them. Its driver,
+`scripts/sweep/sweep.mjs`, measures every queue live, runs the one-shot cleanups, and plans each
+stage in order; the agent dispatches the sub-agents a plan names, each claiming its own batch, and
+asks the driver for the next plan until it says done. `/sweep <pass>` runs one pass: `tags`,
+`edges`, `duplicates`, or `reports`. The summary names every change by note, and what was left for
+you: an item a pass found ambiguous stays pending, and the summary lists it.
 
 ## Leases
 

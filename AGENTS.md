@@ -60,9 +60,12 @@ code.
   `brief.mjs` (the session-start lines), `notices.mjs`, `transcript.mjs`, and `/pickup`'s:
   `digest-run.mjs` (what it gathers and does), `digest.mjs` (its text), `style.mjs`, `queue.mjs`
   (the project's queue and trackers), `drift.mjs` (a checkout against its baseline, and the
-  baseline's write), `github.mjs` (a repository collected from GitHub), and the two scripts' logic,
-  `wrap.mjs` and `queue-cli.mjs`. A script under `scripts/` is a thin entry that imports its logic
-  from `lib/` and calls it, with no `import.meta.main` guard, which Node 22 lacks before 22.18.
+  baseline's write), `github.mjs` (a repository collected from GitHub), and the scripts' logic:
+  `wrap.mjs`, `queue-cli.mjs`, and `/sweep`'s `sweep.mjs` (the driver), `triage.mjs` (the review
+  passes' harness), `tag-distance.mjs`, and `sweep-files.mjs` (the session's working folder). A
+  script under `scripts/` or `scripts/sweep/` is a thin entry that imports its logic from `lib/` and
+  calls it, with no `import.meta.main` guard, which Node 22 lacks before 22.18. `agents/` holds
+  `sweep.md`, the sub-agent `/sweep` dispatches.
 - `tests/`: tape-six tests. `helpers.mjs` runs a hook as Claude Code does and serves a fake API that
   keeps leases by the server's rules.
 
