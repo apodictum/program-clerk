@@ -1,6 +1,6 @@
 {
   "name": "program-clerk",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Connects Claude Code to your Program Clerk account: notes your agents share across projects, machines, and sessions, leases that keep two agents out of one checkout, and handoffs between them.",
   "author": {
     "name": "Apodictum LLC"
