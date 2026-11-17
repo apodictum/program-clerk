@@ -252,3 +252,22 @@ export const driftReport = async ({top, project, baselineText, now, versionsOf})
     snapshot
   };
 };
+
+/** The state note a checkout's baseline is kept in, as the API writes a note. */
+export const baselineNote = (project, snapshot) => ({
+  frontmatter: {
+    title: `${project} — state snapshot`,
+    type: 'state',
+    tags: ['state', 'snapshot', project]
+  },
+  body: `The checkout's state when a session last ended with \`/wrap\`, which writes this note; \`/pickup\` reports what moved since.\n\n## Baseline snapshot\n\n\`\`\`json\n${JSON.stringify(snapshot, null, 2)}\n\`\`\`\n`
+});
+
+/** Records the checkout's state now as the project's baseline; answers the write's answer. */
+export const refreshBaseline = async ({api, top, project, now, versionsOf}) => {
+  const {snapshot} = await currentOf({top, project, now, versionsOf});
+  return api(`/vault/projects/${project}/state.md`, {
+    method: 'PUT',
+    body: baselineNote(project, snapshot)
+  });
+};

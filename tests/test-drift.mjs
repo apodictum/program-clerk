@@ -5,10 +5,12 @@ import {writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import test from 'tape-six';
 import {
+  baselineNote,
   baselineOf,
   currentOf,
   driftReport,
-  reconcileLines
+  reconcileLines,
+  refreshBaseline
 } from '../plugins/program-clerk/scripts/lib/drift.mjs';
 import {git, makeRepo, removeAll, scratch} from './helpers.mjs';
 
@@ -20,6 +22,33 @@ test('a baseline note: its JSON block, or null', t => {
   t.deepEqual(baselineOf(noteOf({a: 1})), {a: 1});
   t.equal(baselineOf('no block'), null);
   t.equal(baselineOf('```json\n{bad\n```\n'), null);
+});
+
+test('a refreshed baseline is the checkout now, in a note its reader parses, with no other section', async t => {
+  const dir = scratch();
+  try {
+    const top = makeRepo(join(dir, 'r'));
+    const writes = [];
+    const api = async (path, {method, body}) => {
+      writes.push({path, method, body});
+      return {status: 200, text: '{}'};
+    };
+    const answer = await refreshBaseline({api, top, project: 'p', versionsOf: noVersions});
+    t.equal(answer.status, 200);
+    t.equal(writes.length, 1);
+    t.match(writes[0], {path: '/vault/projects/p/state.md', method: 'PUT'});
+    t.deepEqual(writes[0].body.frontmatter, {
+      title: 'p — state snapshot',
+      type: 'state',
+      tags: ['state', 'snapshot', 'p']
+    });
+    const {snapshot} = await currentOf({top, project: 'p', versionsOf: noVersions});
+    t.deepEqual(baselineOf(writes[0].body.body).repo, snapshot.repo);
+    t.deepEqual(writes[0].body.body.match(/^## .*/gm), ['## Baseline snapshot']);
+    t.ok(baselineNote('p', {a: 1}).body.includes('```json\n{\n  "a": 1\n}\n```'));
+  } finally {
+    removeAll(dir);
+  }
 });
 
 test('a checkout that matches its baseline says so; one with no baseline drifts', async t => {

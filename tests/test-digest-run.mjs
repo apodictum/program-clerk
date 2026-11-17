@@ -8,6 +8,7 @@ import test from 'tape-six';
 import {
   githubOf,
   prepareCollection,
+  privateLine,
   takePrepared
 } from '../plugins/program-clerk/scripts/lib/digest-run.mjs';
 import {fakeServer, hookEnv, makeRepo, removeAll, scratch} from './helpers.mjs';
@@ -188,6 +189,45 @@ test('a checkout with no GitHub remote has no GitHub part', async t => {
       gh: ghStub({})
     });
     t.equal(result, null);
+  } finally {
+    removeAll(dir);
+  }
+});
+
+test('a private repository the trackers do not name is not read, and a line says how to track it', async t => {
+  const dir = scratch();
+  try {
+    const top = makeRepo(join(dir, 'r'), 'git@github.com:o/r.git');
+    const gh = ghStub({
+      'auth status': {code: 0, out: '', err: ''},
+      'api user': {code: 0, out: '{"login":"me"}', err: ''},
+      'api repos/o/r': {code: 0, out: '{"private":true,"default_branch":"main"}', err: ''}
+    });
+    const result = await githubOf({
+      top,
+      project: 'p',
+      trackers: NO_TRACKERS,
+      items: [],
+      api: fakeApi().api,
+      gh
+    });
+    t.deepEqual(result, {problem: privateLine('o/r', 'p')});
+    t.matchString(
+      result.problem,
+      /add \{kind: github, ref: o\/r\} to the trackers: list in projects\/p\/queue\/_about\.md/
+    );
+    const prepared = await githubOf({
+      project: 'p',
+      trackers: NO_TRACKERS,
+      items: [],
+      api: fakeApi().api,
+      prepared: {project: 'p', skipped: true, private: 'o/r'}
+    });
+    t.deepEqual(
+      prepared,
+      {problem: privateLine('o/r', 'p')},
+      'a collection made ahead says the same'
+    );
   } finally {
     removeAll(dir);
   }

@@ -36,6 +36,11 @@ code.
 - **Every call sends `User-Agent: program-clerk-plugin/<version>`**, the version read from
   `plugin.json`: bump the manifest's version with a release, and the server counts calls by it.
 - **Split text on `/\r?\n/`**, never on `'\n'`: the tests run on Windows.
+- **The key never enters the agent's environment.** Claude Code gives the option to hooks alone, so
+  `key-file.mjs` keeps it at session start in a mode-600 file under the state folder, named by the
+  session (only when `PROGRAM_CLERK_KEY` is unset), and removes it at session end. A script finds it
+  by `CLAUDE_CODE_SESSION_ID` (`connectionOf`); nothing is exported, so a command the agent runs,
+  and everything it starts, carries neither the key nor its path.
 
 ## Code style
 
@@ -47,13 +52,17 @@ code.
 
 - `.claude-plugin/marketplace.json`: the marketplace.
 - `plugins/program-clerk/`: the plugin. `skills/` holds one folder per skill; `scripts/hooks/` holds
-  one file per hook; `scripts/digest.mjs` is `/pickup`'s script; `scripts/lib/` holds what they
-  share: `common.mjs` (settings, paths, the holder id), `http.mjs` (a hook's `call` and a script's
-  `request`, with their retries), `checkout.mjs` (a checkout's top, remote, keys, project),
-  `lease.mjs` (the mode, tokens, claims, releases, and the lines), `brief.mjs` (the session-start
-  lines), `notices.mjs`, `transcript.mjs`, and `/pickup`'s: `digest-run.mjs` (what it gathers and
-  does), `digest.mjs` (its text), `style.mjs`, `queue.mjs` (the project's queue and trackers),
-  `drift.mjs` (a checkout against its baseline), `github.mjs` (a repository collected from GitHub).
+  one file per hook; `scripts/digest.mjs` is `/pickup`'s script, `scripts/wrap.mjs` `/wrap`'s writes
+  (the log, its line, the baseline), and `scripts/queue.mjs` the `queue` skill's commands;
+  `scripts/lib/` holds what they share: `common.mjs` (settings, paths, the holder id), `http.mjs` (a
+  hook's `call` and a script's `request`, with their retries), `checkout.mjs` (a checkout's top,
+  remote, keys, project), `lease.mjs` (the mode, tokens, claims, releases, and the lines),
+  `brief.mjs` (the session-start lines), `notices.mjs`, `transcript.mjs`, and `/pickup`'s:
+  `digest-run.mjs` (what it gathers and does), `digest.mjs` (its text), `style.mjs`, `queue.mjs`
+  (the project's queue and trackers), `drift.mjs` (a checkout against its baseline, and the
+  baseline's write), `github.mjs` (a repository collected from GitHub), and the two scripts' logic,
+  `wrap.mjs` and `queue-cli.mjs`. A script under `scripts/` is a thin entry that imports its logic
+  from `lib/` and calls it, with no `import.meta.main` guard, which Node 22 lacks before 22.18.
 - `tests/`: tape-six tests. `helpers.mjs` runs a hook as Claude Code does and serves a fake API that
   keeps leases by the server's rules.
 

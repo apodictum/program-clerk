@@ -20,8 +20,13 @@ You need Node.js and git on your `PATH`: the hooks run `node` and read your chec
 2. When Claude Code asks for the plugin's **Program Clerk key**, paste an API key from your
    account's Keys page. Claude Code keeps it in your system's credential store. The plugin's MCP
    tools send this key, and so do the hooks. The hooks also read `PROGRAM_CLERK_KEY` when the option
-   is empty, but the tools don't. A script the agent runs in its shell sees only
-   `PROGRAM_CLERK_KEY`: with the option alone, type `/pickup` yourself, and its hook has the key.
+   is empty, but the tools don't. A script the agent runs in its shell never sees the option, so at
+   each session start the plugin keeps the key in a file only you can read, named by the session,
+   under its state folder (`~/.local/state/program-clerk/keys/`), and the plugin's scripts find it
+   there. The agent's shell gets neither the key nor the file's path, so the commands it runs, and
+   whatever they start, don't carry it. The file goes when the session ends, and one a crashed
+   session left goes after 30 days. When `PROGRAM_CLERK_KEY` is set, the plugin writes no file and
+   its scripts use the variable.
 3. To receive each release, turn on auto-update for the `program-clerk` marketplace in `/plugin`.
    Auto-update is off by default for marketplaces that Anthropic doesn't publish.
 4. Start a new session. Its first lines start with `[pc]` and say whether the session holds the
@@ -33,19 +38,25 @@ You need Node.js and git on your `PATH`: the hooks run `node` and read your chec
   `https://api.programclerk.dev/mcp`, so a session can search and edit the account's notes, take and
   release leases, and file handoffs.
 - **At session start**, it claims a lease on the checkout the session starts in, prints a brief of
-  the account and the project with any service notices, and prints the project's feedback rules.
+  the account and the project with any service notices, prints the project's feedback rules, and
+  keeps the key where the plugin's scripts find it.
 - **Before an edit** through the Edit, Write, MultiEdit, or NotebookEdit tool, it checks the lease
   of the checkout that holds the file. An edit into a checkout that another session holds is
   blocked, with the steps to do the work in a worktree and hand it over instead.
 - **After each tool call**, it renews the session's lease every 15 minutes and passes on new service
   notices.
-- **At session end**, it releases the session's leases and records what the session did, for the
-  next session's brief.
+- **At session end**, it releases the session's leases, records what the session did for the next
+  session's brief, and removes the key's file.
 - **On `/pickup`** (or `/program-clerk:pickup`), it shows a digest of the project: how the last
   session finished, what is upcoming and open, drift in the checkout since its recorded baseline,
   the project's GitHub threads, and the notes changed since the last session. At a fresh start it
   collects the checkout's GitHub repository in the background, so the digest arrives in about a
   second.
+- **On `/wrap`** (or `/program-clerk:wrap`), the agent saves what the session learned to the
+  project's notes, writes the session's log, and records the checkout's state for the next
+  `/pickup`.
+- **The `queue` skill** gives the agent the project's queue: list, file, move, and archive items,
+  and show where the project's work is tracked.
 
 Every hook fails open: when the server is unreachable or the key is missing, a hook stays silent and
 the session goes on.
@@ -71,7 +82,34 @@ Reading GitHub needs the [`gh` command](https://cli.github.com/) signed in; with
 says so and shows the last stored view. A new issue, pull request, or discussion a person opened,
 and a CVE that lands on an advisory, are filed on the project's queue in the section its GitHub
 tracker names, and the GitHub baseline then moves forward, so the next digest shows only what moved
-after it.
+after it. The last CI result is the default branch's newest run, or a newer pull request's run when
+one was merged after it, as for a repository that tests pull requests alone.
+
+A private repository is read only when the project's trackers name it, so the digest says when the
+checkout's repository is private and untracked. To track it, list it in the frontmatter of
+`projects/<project>/queue/_about.md`, beside the queue's own entry, which stays primary:
+
+```yaml
+trackers:
+  - {kind: 'vault', role: primary}
+  - {kind: github, ref: owner/repo, intake: triage}
+```
+
+`intake: triage` files a person's new threads in the Inbox; leave it out to list them without
+filing.
+
+When the trackers name Linear or Jira, the digest names the tracker, and the agent reads its open
+items updated since the last session through that tracker's tools, such as its MCP server, when the
+session has them. It files none of them on the queue.
+
+## /wrap
+
+`/wrap` ends a stretch of work: a session can wrap more than once. The agent saves what the session
+learned to the project's notes (rules, decisions, lessons, and work for the queue), then writes a
+file with the log's title, summary, and body, and runs the plugin's `wrap.mjs` on it. The script
+writes the log, adds its line to the project's month of sessions, and records the checkout's state
+in `projects/<project>/state.md`. The next `/pickup` shows the log's open items and next steps as
+written, and reports what moved in the checkout since.
 
 ## Leases
 
@@ -113,12 +151,12 @@ Windows, the same holds for the PowerShell tool.
 
 ## Settings
 
-| Variable            | Use                                                                                                  |
-| ------------------- | ---------------------------------------------------------------------------------------------------- |
-| `PROGRAM_CLERK_KEY` | The hooks' key when the plugin's key option is empty, and the only key a script the agent runs sees. |
-| `PROGRAM_CLERK_URL` | The address the hooks call. The default is `https://api.programclerk.dev`.                           |
-| `XDG_CACHE_HOME`    | Where the hooks keep their cache (`program-clerk/` under it).                                        |
-| `XDG_STATE_HOME`    | Where the hooks keep claim tokens and unfinished releases.                                           |
+| Variable            | Use                                                                                                        |
+| ------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `PROGRAM_CLERK_KEY` | The key when the plugin's key option is empty; the plugin's scripts read it before the session's key file. |
+| `PROGRAM_CLERK_URL` | The address the hooks and scripts call. The default is `https://api.programclerk.dev`.                     |
+| `XDG_CACHE_HOME`    | Where the hooks keep their cache (`program-clerk/` under it).                                              |
+| `XDG_STATE_HOME`    | Where the hooks keep claim tokens, unfinished releases, and each session's key file.                       |
 
 Without the `XDG_` variables, the hooks use `~/.cache/program-clerk/` and
 `~/.local/state/program-clerk/`.

@@ -8,11 +8,23 @@ export const DEFAULT_URL = 'https://api.programclerk.dev';
 // A hook runs under a 5 s timeout; its calls stop by this point, so a slow server never kills one.
 export const HOOK_BUDGET_MS = 4500;
 
+// The option reaches hooks alone, so the session-start hook keeps its key in a file only the
+// person can read, named by the session, which a script the agent runs finds by CLAUDE_CODE_SESSION_ID.
+export const keyFileOf = (session, env = process.env) => join(stateDir(env), 'keys', session);
+
+const sessionKey = env => {
+  const session = env.CLAUDE_CODE_SESSION_ID ?? '';
+  return SESSION_ID.test(session) ? readText(keyFileOf(session, env)).trim() : '';
+};
+
 export const connectionOf = (env = process.env) => {
-  const key = env.CLAUDE_PLUGIN_OPTION_KEY || env.PROGRAM_CLERK_KEY || '';
+  const key = env.CLAUDE_PLUGIN_OPTION_KEY || env.PROGRAM_CLERK_KEY || sessionKey(env);
   if (!key) return null;
   return {base: (env.PROGRAM_CLERK_URL || DEFAULT_URL).replace(/\/+$/, ''), key};
 };
+
+export const NO_KEY =
+  'no key: set the plugin key option with /plugin and start a new session, or set PROGRAM_CLERK_KEY';
 
 // `hostname -s`: the house hooks that stay in Bash compare holders by this name.
 export const shortHost = () => hostname().split('.')[0];

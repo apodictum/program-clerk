@@ -6,6 +6,12 @@
           {
             "type": "command",
             "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/hooks/key-file.mjs"],
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "node",
             "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/hooks/lease-claim.mjs"],
             "timeout": 5
           },
@@ -77,6 +83,12 @@
     "SessionEnd": [
       {
         "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/hooks/key-file.mjs"],
+            "timeout": 5
+          },
           {
             "type": "command",
             "command": "node",

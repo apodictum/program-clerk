@@ -74,7 +74,7 @@ export const collectCheckout = async ({top, project, trackers, api, gh = github.
   } catch (err) {
     entry = {repo, project, error: {message: err.message}, events: [], summary: {events: 0}};
   }
-  if (entry.skipped) return {skipped: true};
+  if (entry.skipped) return {skipped: true, ...(entry.reason === 'private' ? {private: repo} : {})};
   return {run: github.digestOf([entry], {mode: 'cwd', ghUser: login.login})};
 };
 
@@ -199,6 +199,10 @@ const fileThreads = async (api, project, threads, section) => {
   return {filed};
 };
 
+// A private repository is read only when the project's trackers name it, so a team opts in.
+export const privateLine = (repo, project) =>
+  `GitHub ${repo} is private, and the project's trackers don't name it, so /pickup reads nothing from it. To read it, add {kind: github, ref: ${repo}} to the trackers: list in projects/${project}/queue/_about.md; the README shows the whole list.`;
+
 /** The GitHub part: whatever fails in it becomes a line beside the stored view, never a lost digest. */
 export const githubOf = async ({top, project, trackers, items, api, prepared, gh}) => {
   let collected;
@@ -208,7 +212,9 @@ export const githubOf = async ({top, project, trackers, items, api, prepared, gh
   } catch (err) {
     return storedGithub(api, project, `GitHub could not be read just now: ${err.message}`);
   }
-  if (collected.skipped) return null;
+  if (collected.skipped) {
+    return collected.private ? {problem: privateLine(collected.private, project)} : null;
+  }
   if (collected.stopped) return storedGithub(api, project, 'GitHub could not be read in time.');
   if (collected.problem !== undefined) {
     return storedGithub(api, project, LOGIN_PROBLEMS[collected.problem]);

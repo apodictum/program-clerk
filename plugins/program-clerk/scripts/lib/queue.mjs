@@ -4,9 +4,12 @@
 // The server stores and queries the notes; what the fields mean is here.
 
 export const SECTIONS = ['inbox', 'active', 'backlog', 'watching'];
+export const CLOSE_REASONS = ['shipped', 'rejected', 'parked', 'deferred'];
 // A source names a ticket a brief checks, and filing replaces the open item that holds it.
 export const SOURCE_RE =
   /^(?:github [\w.-]+\/[\w.-]+(?:#[1-9]\d*| discussion#[1-9]\d*| GHSA-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4})|(?:linear|jira) [A-Z][A-Z0-9]{1,9}-[1-9]\d*)$/;
+export const SOURCE_HELP =
+  "a source names a ticket: 'github owner/repo#15', 'github owner/repo discussion#15', 'github owner/repo GHSA-xxxx-xxxx-xxxx', 'linear ENG-123', or 'jira VS-7'; where an item came from goes in its body";
 const SPECIAL = new Set(['_about.md', '_lead.md']);
 const PAGE = 500;
 const SLUG_MAX = 80;
@@ -66,13 +69,13 @@ export const openFields = ({
 const folderOf = project => `projects/${project}/queue`;
 const closedFolderOf = project => `projects/${project}/queue-archive`;
 
-const queryAll = async (api, folder) => {
+const queryAll = async (api, folder, match) => {
   const items = [];
   for (let offset = 0; ; offset += PAGE) {
     const page = expectJson(
       await api('/notes/query', {
         method: 'POST',
-        body: {folder, sort: 'sequence_key', limit: PAGE, offset}
+        body: {folder, sort: 'sequence_key', limit: PAGE, offset, ...(match ? {match} : {})}
       }),
       `query ${folder}`
     );
@@ -320,7 +323,7 @@ export const fileItem = async (
     throw new RangeError(`a section is one of ${SECTIONS.join(', ')}`);
   }
   if (!title || !body?.trim()) throw new TypeError('an item needs a title and a body');
-  if (source && !SOURCE_RE.test(source)) throw new RangeError(`not a ticket's source: ${source}`);
+  if (source && !SOURCE_RE.test(source)) throw new RangeError(`${SOURCE_HELP}; got: ${source}`);
   await readyToFile(api, project);
   const notes = (await queryAll(api, folderOf(project))).filter(isItem);
   const same = notes.find(
@@ -352,4 +355,120 @@ export const fileItem = async (
     `write ${path}`
   );
   return {path, replaced: same !== undefined};
+};
+
+/** The declaration as one line: the primary tracker, then the secondary ones with their intake. */
+export const trackerLine = view => {
+  const named = t => (t.kind === QUEUE_KIND ? 'queue' : `${t.kind} ${t.ref}`);
+  const secondaries = view.trackers
+    .filter(t => t.role === 'secondary')
+    .map(t => `${named(t)}${t.intake === 'none' ? '' : ` (${t.intake})`}`);
+  const primary = named(view.primary);
+  return secondaries.length
+    ? `${primary} (primary); secondary: ${secondaries.join(', ')}`
+    : primary;
+};
+
+/** The project's open items in order, in one section when it is given. */
+export const listItems = async (api, project, {section} = {}) =>
+  itemsFrom(
+    (await queryAll(api, folderOf(project), section ? {section} : undefined)).filter(isItem)
+  );
+
+/** Every project's open items, in order, each with its project. */
+export const listAll = async (api, {section, priority, limit} = {}) => {
+  const {files} = expectJson(await api(`/vault/projects/`), 'the projects');
+  const names = files.filter(f => f.endsWith('/')).map(f => f.slice(0, -1));
+  const {items: resolved} = expectJson(
+    await api('/resolve', {
+      method: 'POST',
+      body: {wikilinks: names.map(n => `projects/${n}/queue.md`)}
+    }),
+    'the queues'
+  );
+  const all = [];
+  for (const [i, project] of names.entries()) {
+    if (resolved[i].file_path !== `${folderOf(project)}/_about.md`) continue;
+    const notes = (await queryAll(api, folderOf(project))).filter(isItem);
+    all.push(...notes.map(n => ({project, ...shaped(n)})));
+  }
+  const picked = inOrder(
+    all.filter(
+      i =>
+        (!section || i.section === section) && (priority === undefined || i.priority === priority)
+    )
+  );
+  return limit === undefined ? picked : picked.slice(0, limit);
+};
+
+const findNote = async (api, project, ref) => {
+  const notes = (await queryAll(api, folderOf(project))).filter(isItem);
+  const hits = notes.filter(
+    n =>
+      (n.frontmatter.title ?? n.title) === ref ||
+      n.path.endsWith(`/${ref}`) ||
+      n.path.endsWith(`/${ref}.md`)
+  );
+  if (hits.length !== 1) throw new Error(`${hits.length} open items of ${project} match "${ref}"`);
+  return hits[0];
+};
+
+const patchScalars = async (api, recordId, fields) => {
+  const ops = Object.entries(fields).map(([key, value]) =>
+    value === null ? {op: 'remove', path: `/${key}`} : {op: 'set', path: `/${key}`, value}
+  );
+  expectJson(
+    await api(`/sections/${recordId}/fm`, {method: 'PATCH', body: {ops}}),
+    `patch ${recordId}`
+  );
+};
+
+/** Moves an open item to another section, and sets its priority when one is given. */
+export const moveItem = async (api, project, ref, {section, priority}) => {
+  if (!SECTIONS.includes(section)) {
+    throw new RangeError(`a section is one of ${SECTIONS.join(', ')}`);
+  }
+  const note = await findNote(api, project, ref);
+  await patchScalars(api, note.record_id, {
+    section,
+    ...(priority === undefined ? {} : {priority: priority === 0 ? null : priority})
+  });
+  return {path: note.path, section};
+};
+
+/** Closes an open item: its trail appended, its fields set, and the note moved to the archive. */
+export const archiveItem = async (api, project, ref, {reason, trail}) => {
+  if (!CLOSE_REASONS.includes(reason)) {
+    throw new RangeError(`a reason is one of ${CLOSE_REASONS.join(', ')}`);
+  }
+  const note = await findNote(api, project, ref);
+  const date = today();
+  const name = reason[0].toUpperCase() + reason.slice(1);
+  expectJson(
+    await api(`/vault/edit`, {
+      method: 'POST',
+      body: {
+        path: note.path,
+        op: 'append',
+        text: `**${name}** ${date}.${trail ? ` ${trail}` : ''}\n`
+      }
+    }),
+    `trail on ${note.path}`
+  );
+  const folder = closedFolderOf(project);
+  const closed = (await queryAll(api, folder)).filter(isItem);
+  await patchScalars(api, note.record_id, {
+    status: 'archived',
+    closed_at: date,
+    close_reason: reason,
+    section: null,
+    sequence_key: Math.max(0, ...closed.map(n => n.frontmatter.sequence_key ?? 0)) + 1
+  });
+  const taken = new Set(closed.map(n => n.path.slice(folder.length + 1)));
+  const to = `${folder}/${uniqueName(slugOf(note.frontmatter.title ?? note.title), taken)}`;
+  expectJson(
+    await api(`/vault/move`, {method: 'POST', body: {from: note.path, to}}),
+    `move ${note.path}`
+  );
+  return {path: to};
 };
