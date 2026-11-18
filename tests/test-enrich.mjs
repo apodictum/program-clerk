@@ -469,6 +469,35 @@ test('prepare --stale: deltas within the threshold, the rest whole, a folder by 
   }
 });
 
+test('prepare --stale: a folder whose _about.md has a stale suggestion of its own is one item, listed or not', async t => {
+  const {w, enrich, file, done} = await setUp();
+  // An oversized summary on a folder's _about.md files a stale suggestion for the same note.
+  w.stale = [{id: 's9', payload: {record_id: 'ra', file_path: 'projects/p/log/_about.md'}}];
+  Object.assign(w.folder, {summary: true, stale: true});
+  w.fm.set('ra', {agent: {summary: 'The log.', derived_at: '2026-11-01T10:00:00Z'}});
+  const out = file('ws.json', '');
+  try {
+    t.equal(await enrich(['prepare', '--stale', '--holder=h1', `--out=${out}`]), 0);
+    t.deepEqual(
+      json(out).items.map(item => item.file_path),
+      ['projects/p/log/_about.md'],
+      'with no list'
+    );
+    const records = file('stale.txt', 'projects/p/log/_about.md\nprojects/p/log.md\n');
+    t.equal(
+      await enrich(['prepare', '--stale', `--records=${records}`, '--holder=h2', `--out=${out}`]),
+      0
+    );
+    t.deepEqual(
+      json(out).items.map(item => item.file_path),
+      ['projects/p/log/_about.md'],
+      'and with both its paths listed'
+    );
+  } finally {
+    await done();
+  }
+});
+
 test('prepare --refresh --outline: the listed notes as given, each by its headings', async t => {
   const {w, server, enrich, lines, calls, file, done} = await setUp();
   w.fm.set('r1', {agent: {summary: 'One, summarized at length.'}});

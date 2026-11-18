@@ -11,8 +11,9 @@
 //   5 compaction_candidate
 //   6 report, last, so a backlog report is judged against the queue the sweep left
 //
-// Stale enrichment is frozen at `begin` and sharded, a few notes an agent; a note that goes stale
-// mid-sweep waits for the next sweep. A kind whose whole pending set is what the last pass released
+// Stale enrichment is sharded, a few notes an agent: the stale suggestions filed before `begin`,
+// a note that goes stale mid-sweep waiting for the next sweep, and the folders whose summary the
+// lint marks stale, which no suggestion names, read when the plan is made. A kind whose whole pending set is what the last pass released
 // back (the triage harness's report names them) is floored at once, its items listed as skipped.
 
 import {randomBytes} from 'node:crypto';
@@ -124,10 +125,12 @@ export const run = async (
       api('GET', '/suggestions/summary')
     ]);
     const by = summary.by_kind ?? {};
+    const enrichment = lint.coverage?.enrichment;
+    const staleFolders = (enrichment?.folders ?? []).filter(folder => folder.stale);
     return {
       counts: {
-        enrich_backfill: lint.coverage?.enrichment?.unenriched ?? 0,
-        enrich_stale: by.agent_enrichment_stale ?? 0,
+        enrich_backfill: enrichment?.unenriched ?? 0,
+        enrich_stale: (by.agent_enrichment_stale ?? 0) + staleFolders.length,
         new_tag: by.new_tag ?? 0,
         tag_suggestion: by.tag_suggestion ?? 0,
         edge_type: by.edge_type ?? 0,
@@ -137,7 +140,8 @@ export const run = async (
         enrich_oversized: lint.checks?.oversized_summaries?.count ?? 0
       },
       lists: {
-        backfill: lint.coverage?.enrichment?.unenriched_records ?? [],
+        backfill: enrichment?.unenriched_records ?? [],
+        staleFolders: staleFolders.map(({record_id, folder}) => ({record_id, folder})),
         // by record id, which the enrichment reads as the folder a `_about.md` composes
         oversized: (lint.checks?.oversized_summaries?.samples ?? []).map(item => item.id)
       }
@@ -250,10 +254,14 @@ export const run = async (
         }
       } else entry.agents.push({mode: 'backfill', limit: 100, holder: holderFor(state, kind, 0)});
     } else if (kind === 'enrich_stale') {
-      const frozen = (await pendingItems('agent_enrichment_stale'))
-        .filter(item => item.created <= state.started)
-        .map(item => item.payload.file_path);
-      shard(state, entry, {mode: 'stale'}, frozen);
+      const frozen = (await pendingItems('agent_enrichment_stale')).filter(
+        item => item.created <= state.started
+      );
+      const named = new Set(frozen.map(item => item.payload.record_id));
+      shard(state, entry, {mode: 'stale'}, [
+        ...frozen.map(item => item.payload.file_path),
+        ...lists.staleFolders.filter(f => !named.has(f.record_id)).map(f => f.folder)
+      ]);
     } else if (kind === 'enrich_oversized') {
       shard(state, entry, {mode: 'refresh', outline: true}, lists.oversized);
     } else if (kind === 'compaction_candidate') {

@@ -10,12 +10,12 @@ the body it was derived from. When the body changes, the hash drifts and the ser
 
 A pass runs in one mode:
 
-| Mode                   | Notes                                                                                    | `prepare` options                                        |
-| ---------------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| `backfill`             | Notes with no summary block.                                                             | none; `--type=<type>` narrows to one type                |
-| `stale`                | Summaries that no longer match their note, from the `agent_enrichment_stale` queue.      | `--stale`; `--full-threshold=<fraction>`, 0.4 by default |
-| `refresh`              | The notes listed, as given, each with its summary and its whole body.                    | `--refresh --records=<file>`                             |
-| `refresh` with outline | Summaries past their size bound, restated from the note's headings in place of its body. | `--refresh --outline --records=<file>`                   |
+| Mode                   | Notes                                                                                         | `prepare` options                                        |
+| ---------------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `backfill`             | Notes with no summary block.                                                                  | none; `--type=<type>` narrows to one type                |
+| `stale`                | Summaries that no longer match: the `agent_enrichment_stale` queue, the lint's stale folders. | `--stale`; `--full-threshold=<fraction>`, 0.4 by default |
+| `refresh`              | The notes listed, as given, each with its summary and its whole body.                         | `--refresh --records=<file>`                             |
+| `refresh` with outline | Summaries past their size bound, restated from the note's headings in place of its body.      | `--refresh --outline --records=<file>`                   |
 
 The worksheet's `mode` names `backfill` as `missing`. `--records=<file>` names the notes, one path
 or record id a line. It is how a sweep hands each agent its shard, and it narrows `backfill` and
@@ -321,7 +321,8 @@ note's etag.
 
 - Notes without a summary block have piled up: the `lint` tool's `coverage.enrichment` counts them.
 - Notes changed enough that their summaries no longer match: `agent_enrichment_stale` items are
-  pending.
+  pending, or the `lint` tool's `coverage.enrichment.folders` marks a folder `stale`, for which the
+  server files no suggestion.
 - A summary grew past its bound: the `lint` tool counts it under `oversized_summaries`.
 - `resume_bundle` marks a summary `summaryPossiblyStale`: refresh that note with `--refresh` and
   `--records`.

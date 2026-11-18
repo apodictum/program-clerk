@@ -450,7 +450,8 @@ export const run = async (argv, {env = process.env, out = text => console.log(te
         }
         offset += page.items.length;
       }
-      candidates.push(...folderCandidates(f => f.stale));
+      const taken = new Set(candidates.map(candidate => candidate.record_id));
+      candidates.push(...folderCandidates(f => f.stale && !taken.has(f.record_id)));
     } else if (wanted) {
       candidates = (coverage.unenriched_records ?? []).filter(listed);
       candidates.push(...folderCandidates(f => !f.summary));

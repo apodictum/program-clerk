@@ -11,7 +11,10 @@ import {fakeServer, removeAll, scratch} from './helpers.mjs';
 
 const SESSION = '5eed5eed-0000-4000-8000-000000000001';
 
-/** A server whose counts the test sets: `by` the suggestion kinds, `unenriched` the lint's. */
+/**
+ * A server whose counts the test sets: `by` the suggestion kinds, `unenriched` and `folders` the
+ * lint's.
+ */
 const setUp = async () => {
   const dir = scratch();
   const world = {
@@ -20,6 +23,7 @@ const setUp = async () => {
     backfill: [],
     oversized: 0,
     oversizedIds: [],
+    folders: [],
     pending: {},
     failing: false
   };
@@ -28,7 +32,13 @@ const setUp = async () => {
       body: {
         ok: !world.failing,
         total_issues: world.failing ? 1 : 0,
-        coverage: {enrichment: {unenriched: world.unenriched, unenriched_records: world.backfill}},
+        coverage: {
+          enrichment: {
+            unenriched: world.unenriched,
+            unenriched_records: world.backfill,
+            folders: world.folders
+          }
+        },
         checks: {
           oversized_summaries: {
             count: world.oversized,
@@ -191,6 +201,52 @@ test('enrichment comes first: backfill chunked, stale frozen at begin and sharde
     ]);
     t.equal(readFileSync(byKind.enrich_oversized.agents[1].records_file, 'utf8'), 'r2\n');
     t.equal(plan.estimate_s, null, 'a backfill has no measured rate, so the plan has no estimate');
+  } finally {
+    await done();
+  }
+});
+
+test('a stale folder summary is stale enrichment: counted, sharded by the note it composes, once', async t => {
+  const {world, sweep, done} = await setUp();
+  const folder = (id, stale) => ({
+    record_id: id,
+    file_path: `p/${id}/_about.md`,
+    folder: `p/${id}.md`,
+    stale
+  });
+  try {
+    world.folders = [folder('fa', true), folder('fb', false), folder('fc', true)];
+    // An oversized summary on a folder's _about.md is a stale suggestion for the same note.
+    world.by = {agent_enrichment_stale: 1};
+    world.pending = {
+      agent_enrichment_stale: [
+        {
+          id: 's0',
+          payload: {record_id: 'fc', file_path: 'p/fc/_about.md'},
+          created: '2000-01-01T00:00:00Z'
+        }
+      ]
+    };
+    let plan = await sweep(['begin']);
+    t.match(plan, {status: 'dispatch', stage: 1});
+    const [stale] = plan.dispatch;
+    t.match(
+      stale,
+      {kind: 'enrich_stale', pass: 'enrich', count: 3},
+      'counted by source: the suggestion and the two stale folders'
+    );
+    t.deepEqual(
+      stale.agents.map(a => a.records),
+      [2],
+      'each note once'
+    );
+    t.equal(readFileSync(stale.agents[0].records_file, 'utf8'), 'p/fc/_about.md\np/fa.md\n');
+
+    world.folders = [folder('fa', false), folder('fb', false), folder('fc', false)];
+    world.by = {};
+    world.pending = {};
+    plan = await sweep(['next']);
+    t.match(plan, {status: 'done', reason: 'converged', residue: {}});
   } finally {
     await done();
   }
