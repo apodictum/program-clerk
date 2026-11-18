@@ -3,8 +3,10 @@
 The Program Clerk plugin connects Claude Code to your Program Clerk account. Your agents share notes
 across projects, machines, and sessions, take a lease on the checkout they work in so that two
 agents don't edit one working tree at once, and hand work to each other when they can't. The plugin
-brings the account's MCP tools into every session and runs the hooks that keep those leases and tell
-each session where it stands.
+brings the account's MCP tools into every session, runs the hooks that keep those leases and tell
+each session where it stands, and adds the commands that pick a project up (`/pickup`), wrap a
+session (`/wrap`), keep the project's queue, maintain the notes (`/sweep`, `/ingest`), and reach the
+account's other commands (`/pc`).
 
 ## Install
 

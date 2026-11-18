@@ -8,7 +8,7 @@
     {
       "name": "program-clerk",
       "source": "./plugins/program-clerk",
-      "description": "Connects Claude Code to your Program Clerk account: notes your agents share across projects, machines, and sessions, leases that keep two agents out of one checkout, and handoffs between them."
+      "description": "Connects Claude Code to your Program Clerk account: notes your agents share across projects, machines, and sessions, leases that keep two agents out of one checkout, handoffs between them, and the commands that pick a project up, wrap a session, keep its queue, and maintain the notes (/pickup, /wrap, /sweep, /ingest, /pc)."
     }
   ]
 }
