@@ -29,6 +29,9 @@ test('which answers a call sends again, how often, and the remembered outage', a
   const server = await fakeServer(
     scripted({
       'POST /w-unreached': ['503:tenant_unavailable', '200'],
+      'POST /w-unverified': ['503:verification_unavailable', '200'],
+      'POST /w-paused': ['503:writes_paused', '200'],
+      'POST /w-busy': ['503:data_busy', '200'],
       'POST /w-maybe': ['503:database_unavailable', '200'],
       'POST /w-gateway': ['502', '200'],
       'GET /r-maybe': ['503:database_unavailable', '200'],
@@ -52,6 +55,10 @@ test('which answers a call sends again, how often, and the remembered outage', a
     [200, 2],
     'a write refused with a code that applied nothing goes again'
   );
+  for (const path of ['/w-unverified', '/w-paused', '/w-busy']) {
+    answer = await call(conn, path, {method: 'POST', body: {}, deadline: deadline(), env});
+    t.deepEqual([answer?.status, sent(path)], [200, 2], `${path}: it applied nothing, so again`);
+  }
   answer = await call(conn, '/w-maybe', {method: 'POST', body: {}, deadline: deadline(), env});
   t.deepEqual(
     [answer?.status, sent('/w-maybe')],

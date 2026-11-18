@@ -7,7 +7,8 @@ import {cacheDir} from './common.mjs';
 const APPLIED_NOTHING = new Set([
   'tenant_unavailable',
   'verification_unavailable',
-  'writes_paused'
+  'writes_paused',
+  'data_busy'
 ]);
 
 const delaysOf = (env = process.env) => {
