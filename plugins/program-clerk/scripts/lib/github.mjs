@@ -539,7 +539,14 @@ const readRepo = async ({
         if (prRuns.length > 0)
           return ciOf(runOfCommit(prRuns), {number: p.number, merged_at: p.merged_at});
       }
-      return head ? ciOf(runOfCommit(runs.filter(r => r.head_sha === head.head_sha))) : null;
+      if (head) return ciOf(runOfCommit(runs.filter(r => r.head_sha === head.head_sha)));
+      // Dependabot's and code scanning's workflows are `dynamic/`; a file of ours with no run is a miss.
+      const files = (await api(`${R}/actions/workflows?per_page=100`)).workflows
+        .filter(w => w.state === 'active' && w.path.startsWith('.github/workflows/'))
+        .map(w => w.path);
+      if (files.length > 0)
+        throw new Error(`no run found on ${meta.default_branch} for ${files.join(', ')}`);
+      return null;
     },
     null
   );

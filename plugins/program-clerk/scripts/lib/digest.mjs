@@ -227,15 +227,20 @@ const trackerLines = ({primary, trackers = []}) => {
   return lines;
 };
 
+// A repository with no CI has it skipped on purpose, so the line says nothing of it.
+const ciClause = ({snapshot, ciError}) => {
+  if (snapshot.ci) return `: CI ${ciText(snapshot.ci)}`;
+  return ciError === undefined ? '' : `: CI unknown (${ciError})`;
+};
+
 const externalLines = ({project: p, github}) => {
   const lines = trackerLines(p.trackers);
   if (github === null) return lines;
   if (github.problem !== undefined) lines.push(github.problem);
   if (github.repo === undefined) return lines;
   const {snapshot} = github;
-  const ci = snapshot.ci ? ciText(snapshot.ci) : 'unknown';
   lines.push(
-    `GitHub ${github.repo}: CI ${ci}${github.stored ? `, as stored ${day(snapshot.collected_at)}` : ''}.`
+    `GitHub ${github.repo}${ciClause(github)}${github.stored ? `, as stored ${day(snapshot.collected_at)}` : ''}.`
   );
   const threads = threadLines(snapshot);
   if (github.brief || threads.length > 0 || github.filed.length > 0) lines.push(FROM_OUTSIDE);

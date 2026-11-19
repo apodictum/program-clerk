@@ -86,7 +86,8 @@ const quietRoutes = (meta = {}) => ({
   [`${R}/dependabot/alerts?state=open`]: [],
   [`${R}/code-scanning/alerts?state=open`]: [],
   [`${R}/actions/runs?branch=main`]: {workflow_runs: []},
-  [`${R}/pulls?state=closed&base=main&sort=updated&direction=desc`]: []
+  [`${R}/pulls?state=closed&base=main&sort=updated&direction=desc`]: [],
+  [`${R}/actions/workflows`]: {total_count: 0, workflows: []}
 });
 
 const collect = (gh, extra = {}) =>
@@ -1148,6 +1149,38 @@ test("CI: the default branch's own run wins over a pull request merged before it
   routes[`${R}/actions/runs?branch=main`] = {workflow_runs: []};
   routes[`${R}/pulls?state=closed&base=main&sort=updated&direction=desc`] = [];
   t.equal((await collect(ghStub(routes).gh)).snapshot.ci, null);
+});
+
+test('CI: with no run found, no active workflow file is no CI, and one is a failed read', async t => {
+  const routes = quietRoutes();
+  const workflow = (path, state = 'active') => ({path, state});
+  routes[`${R}/actions/workflows`] = {
+    total_count: 2,
+    workflows: [
+      workflow('dynamic/dependabot/dependabot-updates'),
+      workflow('.github/workflows/old.yml', 'disabled_manually')
+    ]
+  };
+  let entry = await collect(ghStub(routes).gh);
+  t.equal(entry.snapshot.ci, null);
+  t.deepEqual(entry.errors, []);
+
+  routes[`${R}/actions/workflows`].workflows.push(workflow('.github/workflows/tests.yml'));
+  entry = await collect(ghStub(routes).gh);
+  t.equal(entry.snapshot.ci, null);
+  t.deepEqual(entry.errors, [
+    {where: 'ci', status: null, message: 'no run found on main for .github/workflows/tests.yml'}
+  ]);
+
+  routes[`${R}/actions/runs?branch=main`] = {
+    workflow_runs: [ciRun('push', 'success', '2026-11-15T00:00:00Z')]
+  };
+  const {gh, calls} = ghStub(routes);
+  t.equal((await collect(gh)).snapshot.ci.conclusion, 'success');
+  t.notOk(
+    calls.some(args => args.at(-1).includes('/actions/workflows')),
+    'read only on a miss'
+  );
 });
 
 const ALPHA_EVENTS = [

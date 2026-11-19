@@ -250,6 +250,7 @@ export const githubOf = async ({top, project, trackers, items, api, prepared, gh
   return {
     repo: entry.repo,
     snapshot: entry.snapshot,
+    ciError: entry.errors.find(e => e.where === 'ci')?.message,
     firstRun: entry.first_run,
     brief: entry.events.length > 0 ? github.renderBrief(run).trim() : '',
     filed,

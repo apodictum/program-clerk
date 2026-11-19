@@ -93,7 +93,9 @@ says so and shows the last stored view. A new issue, pull request, or discussion
 and a CVE that lands on an advisory, are filed on the project's queue in the section its GitHub
 tracker names, and the GitHub baseline then moves forward, so the next digest shows only what moved
 after it. The last CI result is the default branch's newest run, or a newer pull request's run when
-one was merged after it, as for a repository that tests pull requests alone.
+one was merged after it, as for a repository that tests pull requests alone. A repository with no
+active workflow file has no CI, and the line leaves CI out. When a workflow file has no run the
+reader finds, or the read fails, the line says `CI unknown` and why.
 
 A private repository is read only when the project's trackers name it, so the digest says when the
 checkout's repository is private and untracked. To track it, list it in the frontmatter of

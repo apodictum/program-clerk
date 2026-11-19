@@ -22,6 +22,7 @@ const entryOf = (extra = {}) => ({
   first_run: false,
   events: [event],
   summary: {events: 1},
+  errors: [],
   snapshot: {repo: 'o/r', ci: {conclusion: 'success'}, items: {}},
   ...extra
 });
@@ -120,6 +121,25 @@ test('a thread the tracker takes no intake from is not filed, and the baseline a
     'POST /data/projects/p/data/github-runs/2026-11.jsonl'
   ]);
   t.deepEqual(result.filed, []);
+});
+
+test("a CI read that failed passes its reason on, and the other parts' failures do not", async t => {
+  const {api} = fakeApi();
+  const errors = [
+    {where: 'releases', status: 502, message: 'Bad Gateway'},
+    {where: 'ci', status: null, message: 'no run found on main for .github/workflows/t.yml'}
+  ];
+  const snapshot = {repo: 'o/r', ci: null, items: {}};
+  const read = async extra =>
+    githubOf({
+      project: 'p',
+      trackers: NO_TRACKERS,
+      items: [],
+      api,
+      prepared: preparedOf({snapshot, ...extra})
+    });
+  t.equal((await read({errors})).ciError, errors[1].message);
+  t.equal((await read({errors: errors.slice(0, 1)})).ciError, undefined);
 });
 
 test('GitHub refusing the repository falls back to the stored view, with a line', async t => {

@@ -379,6 +379,25 @@ test('GitHub unreadable reports it beside the stored view; a clean tree shows no
   t.ok(!text.includes('Drift:'));
 });
 
+test('the GitHub line says CI when it ran, unknown when unread, and nothing when there is none', t => {
+  const lineOf = github =>
+    digestOf(inputs({github: {repo: 'o/r', filed: [], ...github}}))
+      .split(/\r?\n/)
+      .find(line => line.startsWith('GitHub o/r'));
+  const stored = {snapshot: {collected_at: '2026-11-01T00:00:00Z'}, stored: true};
+  t.equal(lineOf({snapshot: {ci: {conclusion: 'success'}}}), 'GitHub o/r: CI success.');
+  t.equal(lineOf({snapshot: {ci: null}}), 'GitHub o/r.');
+  t.equal(
+    lineOf({snapshot: {ci: null}, ciError: 'no run found on main for .github/workflows/t.yml'}),
+    'GitHub o/r: CI unknown (no run found on main for .github/workflows/t.yml).'
+  );
+  t.equal(lineOf(stored), 'GitHub o/r, as stored 2026-11-01.');
+  t.equal(
+    lineOf({...stored, snapshot: {...stored.snapshot, ci: {conclusion: 'failure'}}}),
+    'GitHub o/r: CI failure, as stored 2026-11-01.'
+  );
+});
+
 test('a drift check that could not run says so, and a report stays a report', t => {
   const refused = digestOf(
     inputs({drift: {problem: 'retrying.\nthe baseline could not be read: 401'}})
