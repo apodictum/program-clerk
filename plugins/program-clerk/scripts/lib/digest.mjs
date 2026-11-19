@@ -200,9 +200,12 @@ const openLines = ({project: p, owed, logBody, drift}) => {
       open
     );
   }
+  const logged = new Set(open === null ? [] : open.split(/\r?\n/).map(line => line.trim()));
   for (const entry of owed) {
     const label = OPEN_KINDS[entry.kind];
-    if (label !== undefined) lines.push(`- ${label}: ${entry.why}`);
+    if (label === undefined) continue;
+    const line = `- ${label}: ${entry.why}`;
+    if (!logged.has(line)) lines.push(line);
   }
   for (const notice of p.notices) {
     lines.push(`- ${notice.by.title ?? notice.by.file_path} ${notice.type} ${notice.file}`);
