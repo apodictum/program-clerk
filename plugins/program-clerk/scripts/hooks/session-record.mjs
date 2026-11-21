@@ -4,11 +4,17 @@
 
 import {execFileSync} from 'node:child_process';
 import {existsSync, readFileSync} from 'node:fs';
-import {homedir} from 'node:os';
 import {join} from 'node:path';
-import {HOOK_BUDGET_MS, SESSION_ID, connectionOf, holderOf, readPayload} from '../lib/common.mjs';
+import {
+  HOOK_BUDGET_MS,
+  SESSION_ID,
+  connectionOf,
+  holderOf,
+  readPayload,
+  transcriptsDirOf
+} from '../lib/common.mjs';
 import {call} from '../lib/http.mjs';
-import {PROJECT, projectOf, topOf} from '../lib/checkout.mjs';
+import {PROJECT, changedSinceMark, projectOf, topOf} from '../lib/checkout.mjs';
 import {readTranscript} from '../lib/transcript.mjs';
 
 const deadline = Date.now() + HOOK_BUDGET_MS;
@@ -46,13 +52,7 @@ const main = async () => {
   const ended = new Date().toISOString().slice(0, 19) + 'Z';
   let transcript = typeof payload.transcript_path === 'string' ? payload.transcript_path : '';
   if (!transcript || !existsSync(transcript))
-    transcript = join(
-      homedir(),
-      '.claude',
-      'projects',
-      cwd.replace(/[\\/]/g, '-'),
-      `${sessionId}.jsonl`
-    );
+    transcript = join(transcriptsDirOf(cwd), `${sessionId}.jsonl`);
   let {started, wrote} = {started: '', wrote: []};
   try {
     ({started, wrote} = readTranscript(readFileSync(transcript, 'utf8')));
@@ -60,6 +60,8 @@ const main = async () => {
     // no transcript: the session's end alone
   }
   started ||= ended;
+  // at most a second, so the commits' read and the append keep their share of the budget
+  const changed = changedSinceMark(sessionId, top, Math.min(1000, deadline - Date.now() - 3000));
   const line = {
     kind: 'end',
     ended,
@@ -67,7 +69,8 @@ const main = async () => {
     started,
     reason,
     commits: commitsSince(top, started),
-    wrote
+    wrote,
+    ...(changed === undefined ? {} : {changed})
   };
   await call(conn, `/data/projects/${project}/data/sessions/${ended.slice(0, 7)}.jsonl`, {
     method: 'POST',

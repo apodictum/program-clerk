@@ -8,7 +8,10 @@ const ONE_PATH = new Set([
   'insert_item',
   'remove_item',
   'update_piece',
-  'delete_file'
+  'delete_file',
+  'split',
+  'join',
+  'restore'
 ]);
 const NOTE = /^[a-z0-9][A-Za-z0-9._/-]*\.md$/;
 

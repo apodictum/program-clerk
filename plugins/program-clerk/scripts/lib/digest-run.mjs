@@ -6,12 +6,11 @@
 import {execFile} from 'node:child_process';
 import {closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync} from 'node:fs';
 import {readdirSync, renameSync, rmSync, statSync, writeFileSync} from 'node:fs';
-import {homedir} from 'node:os';
 import {basename, join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {refusedKeyLine} from './brief.mjs';
 import {projectOf, topOf} from './checkout.mjs';
-import {cacheDir, connectionOf, fileSafe, shortHost} from './common.mjs';
+import {cacheDir, connectionOf, fileSafe, shortHost, transcriptsDirOf} from './common.mjs';
 import {digestOf, intakeOf, lastMessageOf, laterThanLog, newestOf} from './digest.mjs';
 import {owedOf, threadsToFile} from './digest.mjs';
 import {driftReport} from './drift.mjs';
@@ -277,8 +276,7 @@ const lastMessageOfUnlogged = (p, cwd, env) => {
   if (later.length === 0) return null;
   const [host, prefix] = newestOf(later).holder.split('/');
   if (host !== shortHost()) return null;
-  const config = env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude');
-  const folder = join(config, 'projects', cwd.replace(/[^a-zA-Z0-9]/g, '-'));
+  const folder = transcriptsDirOf(cwd, env);
   try {
     const name = readdirSync(folder).find(f => f.startsWith(prefix) && f.endsWith('.jsonl'));
     return name === undefined ? null : lastMessageOf(tailOf(join(folder, name)));

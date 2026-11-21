@@ -40,15 +40,16 @@ You need Node.js and git on your `PATH`: the hooks run `node` and read your chec
   `https://api.programclerk.dev/mcp`, so a session can search and edit the account's notes, take and
   release leases, and file handoffs.
 - **At session start**, it claims a lease on the checkout the session starts in, prints a brief of
-  the account and the project with any service notices, prints the project's feedback rules, and
-  keeps the key where the plugin's scripts find it.
+  the account and the project with any service notices, prints the project's feedback rules, keeps
+  the key where the plugin's scripts find it, and notes the state of the checkout.
 - **Before an edit** through the Edit, Write, MultiEdit, or NotebookEdit tool, it checks the lease
   of the checkout that holds the file. An edit into a checkout that another session holds is
   blocked, with the steps to do the work in a worktree and hand it over instead.
 - **After each tool call**, it renews the session's lease every 15 minutes and passes on new service
   notices.
 - **At session end**, it releases the session's leases, records what the session did for the next
-  session's brief, and removes the key's file.
+  session's brief (its commits, the notes it wrote, and whether it changed the checkout), and
+  removes the key's file.
 - **On `/pickup`** (or `/program-clerk:pickup`), it shows a digest of the project: how the last
   session finished, what is upcoming and open, drift in the checkout since its recorded baseline,
   the project's GitHub threads, and the notes changed since the last session. At a fresh start it

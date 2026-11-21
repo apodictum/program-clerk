@@ -31,6 +31,14 @@ export const shortHost = () => hostname().split('.')[0];
 
 export const holderOf = sessionId => `${shortHost()}/${sessionId.slice(0, 8)}`;
 
+// Claude Code names a working folder's transcript folder with every other character a dash.
+export const transcriptsDirOf = (cwd, env = process.env) =>
+  join(
+    env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude'),
+    'projects',
+    cwd.replace(/[^a-zA-Z0-9]/g, '-')
+  );
+
 export const cacheDir = (env = process.env) =>
   join(env.XDG_CACHE_HOME || join(homedir(), '.cache'), 'program-clerk');
 

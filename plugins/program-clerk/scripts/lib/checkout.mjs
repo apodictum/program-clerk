@@ -1,7 +1,16 @@
 import {execFileSync} from 'node:child_process';
-import {existsSync, readFileSync, realpathSync, statSync} from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  writeFileSync
+} from 'node:fs';
 import {basename, dirname, join} from 'node:path';
-import {shortHost} from './common.mjs';
+import {cacheDir, hashOf, readText, shortHost} from './common.mjs';
 
 const git = (dir, ...args) => {
   try {
@@ -46,6 +55,101 @@ export const topOfPath = path => {
     dir = up;
   }
   return topOf(dir);
+};
+
+// Past this much `git status` output a checkout gets no mark, and its session is judged without one.
+const MARK_LIMIT = 4 * 1024 * 1024;
+const MARK_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * The checkout's state as a hash: HEAD, and each changed or untracked file with its size and time;
+ * null when git cannot say within `budget` milliseconds.
+ */
+export const markOf = (top, budget = 2000) => {
+  const until = Date.now() + budget;
+  const run = (...args) =>
+    execFileSync('git', ['-C', top, ...args], {
+      encoding: 'utf8',
+      env: {...process.env, GIT_OPTIONAL_LOCKS: '0'},
+      maxBuffer: MARK_LIMIT,
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: Math.max(1, until - Date.now()),
+      windowsHide: true
+    });
+  let status;
+  try {
+    status = run('status', '--porcelain=v1', '-z', '--no-renames', '--untracked-files=all');
+  } catch {
+    return null;
+  }
+  let head = '';
+  try {
+    head = run('rev-parse', '--verify', '-q', 'HEAD').trim();
+  } catch {
+    if (Date.now() >= until) return null;
+    // no commit yet
+  }
+  const parts = [head];
+  for (const entry of status.split('\0')) {
+    if (!entry) continue;
+    if (Date.now() >= until) return null;
+    let stamp = '';
+    try {
+      const stat = statSync(join(top, entry.slice(3)));
+      stamp = `${stat.size} ${stat.mtimeMs}`;
+    } catch {
+      // deleted: its entry alone
+    }
+    parts.push(entry, stamp);
+  }
+  return hashOf(parts.join('\t'));
+};
+
+const markFileOf = (session, env) => join(cacheDir(env), 'marks', session);
+
+const pruneMarks = dir => {
+  const cutoff = Date.now() - MARK_KEEP_MS;
+  try {
+    for (const name of readdirSync(dir)) {
+      const file = join(dir, name);
+      if (statSync(file).mtimeMs < cutoff) rmSync(file, {force: true});
+    }
+  } catch {
+    // a crashed session's mark is only kept tidy
+  }
+};
+
+/** Keeps the checkout's mark for the session once: a compaction or a resume keeps the first. */
+export const keepMark = (session, top, env = process.env) => {
+  const file = markFileOf(session, env);
+  if (existsSync(file)) return;
+  const mark = markOf(top);
+  if (mark === null) return;
+  pruneMarks(dirname(file));
+  try {
+    mkdirSync(dirname(file), {recursive: true, mode: 0o700});
+    writeFileSync(file, `${top}\t${mark}`, {flag: 'wx', mode: 0o600});
+  } catch {
+    // another start of the session wrote it first
+  }
+};
+
+/**
+ * Whether the checkout differs from the mark kept at the session's start, undefined when either
+ * side is unknown or git takes longer than `budget` milliseconds; the mark goes.
+ */
+export const changedSinceMark = (session, top, budget, env = process.env) => {
+  const file = markFileOf(session, env);
+  const kept = readText(file);
+  try {
+    rmSync(file, {force: true});
+  } catch {
+    // left for the prune
+  }
+  const tab = kept.lastIndexOf('\t');
+  if (tab < 0 || kept.slice(0, tab) !== top) return undefined;
+  const mark = markOf(top, budget);
+  return mark === null ? undefined : mark !== kept.slice(tab + 1);
 };
 
 export const isLinkedWorktree = top => {

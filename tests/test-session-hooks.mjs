@@ -1,5 +1,5 @@
 import test from 'tape-six';
-import {mkdirSync, writeFileSync} from 'node:fs';
+import {existsSync, mkdirSync, utimesSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {
   DEAD,
@@ -13,6 +13,7 @@ import {
   runHook,
   scratch
 } from './helpers.mjs';
+import {markOf} from '../plugins/program-clerk/scripts/lib/checkout.mjs';
 import {ADVICE, noticeLines} from '../plugins/program-clerk/scripts/lib/notices.mjs';
 import {readTranscript} from '../plugins/program-clerk/scripts/lib/transcript.mjs';
 
@@ -120,6 +121,9 @@ test('the session record: what the session wrote, from its transcript', t => {
     tool('Bash', {command: 'pc-curl /vault/topics/pc.md -X PUT --data-binary @body.md'}),
     tool('mcp__program-clerk__read_file', {path: 'topics/read-only.md'}),
     tool('mcp__other__append', {path: 'topics/elsewhere.md'}),
+    tool('mcp__program-clerk__split', {path: 'projects/demo/learnings.md'}),
+    tool('mcp__program-clerk__join', {path: 'projects/demo/plan.md'}),
+    tool('mcp__program-clerk__restore', {path: 'topics/back.md', sha: 'abc1234'}),
     'not json'
   ].join('\r\n');
   t.deepEqual(readTranscript(transcript), {
@@ -127,8 +131,11 @@ test('the session record: what the session wrote, from its transcript', t => {
     wrote: [
       'archive/2026/old.md',
       'logs/old.md',
+      'projects/demo/learnings.md',
+      'projects/demo/plan.md',
       'projects/demo/queue-archive.md',
       'projects/demo/queue.md',
+      'topics/back.md',
       'topics/new-name.md',
       'topics/old.md',
       'topics/pc.md',
@@ -218,6 +225,120 @@ test("the session record hook appends the end line to the project's month file",
     `/data/projects/vs-demo/data/sessions/${month}.jsonl`,
     "a linked worktree records under its main checkout's project"
   );
+  t.notOk('changed' in server.requests.at(-1).json, 'no mark kept at the start, no answer');
+  await server.close();
+  removeAll(home);
+});
+
+test("a checkout's mark moves with HEAD and with each changed or untracked file", t => {
+  const home = scratch();
+  const repo = makeRepo(join(home, 'repo'));
+  const clean = markOf(repo);
+  t.matchString(clean, /^[0-9a-f]{40}$/);
+  t.equal(markOf(repo), clean, 'an unchanged checkout keeps its mark');
+
+  const file = join(repo, 'a.txt');
+  writeFileSync(file, 'one\n');
+  utimesSync(file, 1e9, 1e9);
+  const untracked = markOf(repo);
+  t.notEqual(untracked, clean, 'a new untracked file');
+  writeFileSync(file, 'three\n');
+  utimesSync(file, 1e9, 1e9);
+  const longer = markOf(repo);
+  t.notEqual(longer, untracked, 'an untracked file edited, by its size');
+  utimesSync(file, 2e9, 2e9);
+  t.notEqual(markOf(repo), longer, 'and by its time');
+  writeFileSync(file, 'two\n');
+
+  git(repo, 'add', 'a.txt');
+  git(repo, 'commit', '-q', '-m', 'second');
+  const committed = markOf(repo);
+  t.notEqual(committed, clean, 'a commit: the tree is clean again, and HEAD moved');
+  writeFileSync(file, 'three\n');
+  t.notEqual(markOf(repo), committed, 'a tracked file edited');
+  writeFileSync(file, 'two\n');
+  t.equal(markOf(repo), committed, 'and put back as it was');
+
+  const outside = join(home, 'outside');
+  mkdirSync(outside);
+  t.equal(markOf(outside), null, 'no checkout, no mark');
+  t.equal(markOf(repo, 0), null, 'no time left, no mark');
+  removeAll(home);
+});
+
+test('the session record says whether the session changed the checkout', async t => {
+  const home = scratch();
+  const repo = makeRepo(join(home, 'vs-demo'));
+  const other = makeRepo(join(home, 'vs-other'));
+  const month = new Date().toISOString().slice(0, 7);
+  const server = await fakeServer({
+    [`POST /data/projects/vs-demo/data/sessions/${month}.jsonl`]: {body: {}},
+    [`POST /data/projects/vs-other/data/sessions/${month}.jsonl`]: {body: {}}
+  });
+  const env = hookEnv(home, server.base);
+  const marks = join(home, 'cache', 'program-clerk', 'marks');
+  const start = (session_id, source = 'startup', cwd = repo) =>
+    runHook('session-mark.mjs', {session_id, cwd, source}, env);
+  const end = async (session_id, cwd = repo) => {
+    await runHook('session-record.mjs', {session_id, cwd, reason: 'prompt_input_exit'}, env);
+    return server.requests.at(-1).json;
+  };
+
+  let r = await runHook(
+    'session-mark.mjs',
+    {session_id: 'aaaa0000', cwd: repo},
+    hookEnv(home, null)
+  );
+  t.deepEqual([r.code, r.stdout, existsSync(marks)], [0, '', false], 'no key: silent, no mark');
+  r = await start('aaaa0000', 'startup', home);
+  t.deepEqual([r.code, r.stdout, existsSync(marks)], [0, '', false], 'outside a checkout: none');
+
+  await start('aaaa0000');
+  t.ok(existsSync(join(marks, 'aaaa0000')), 'kept at the start');
+  t.equal((await end('aaaa0000')).changed, false, 'a session that changed nothing');
+  t.notOk(existsSync(join(marks, 'aaaa0000')), 'the mark goes at the end');
+
+  await start('bbbb0000');
+  writeFileSync(join(repo, 'new.txt'), 'x\n');
+  await start('bbbb0000', 'compact');
+  t.equal((await end('bbbb0000')).changed, true, 'a new file, kept across a compaction');
+
+  await start('cccc0000');
+  git(repo, 'add', 'new.txt');
+  git(repo, 'commit', '-q', '-m', 'during the session');
+  t.equal((await end('cccc0000')).changed, true, 'a commit');
+
+  await start('dddd0000');
+  t.notOk('changed' in (await end('dddd0000', other)), 'ended in another checkout: no answer');
+  await server.close();
+  removeAll(home);
+});
+
+test('with no transcript path, the session record reads the transcript where Claude Code keeps it', async t => {
+  const home = scratch();
+  const repo = makeRepo(join(home, 'site.example.com'));
+  const config = join(home, 'claude-config');
+  const name = repo.replace(/[^a-zA-Z0-9]/g, '-');
+  t.matchString(name, /-site-example-com$/, 'a dot is a dash too');
+  mkdirSync(join(config, 'projects', name), {recursive: true});
+  writeFileSync(
+    join(config, 'projects', name, 'feedface-0000.jsonl'),
+    JSON.stringify({
+      timestamp: '2026-09-30T01:00:00.000Z',
+      message: {role: 'user', content: 'hi'}
+    }) + '\n'
+  );
+  const month = new Date().toISOString().slice(0, 7);
+  const server = await fakeServer({
+    [`POST /data/projects/site.example.com/data/sessions/${month}.jsonl`]: {body: {}}
+  });
+  const env = hookEnv(home, server.base, {CLAUDE_CONFIG_DIR: config});
+  await runHook(
+    'session-record.mjs',
+    {session_id: 'feedface-0000', cwd: repo, reason: 'prompt_input_exit'},
+    env
+  );
+  t.equal(server.requests.at(-1).json.started, '2026-09-30T01:00:00Z', 'its start, from it');
   await server.close();
   removeAll(home);
 });
