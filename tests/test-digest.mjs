@@ -303,6 +303,21 @@ test('an owed line the last log already carries shows once', t => {
   t.ok(text.includes('From the last log:\n- A question?\n- In the Inbox: New.'));
 });
 
+test('an owed line the last log carries under another bullet shows once', t => {
+  const owed = owedOf(
+    {project: {name: 'p', handoffs: {open: [], returned: []}, trackers: {problems: []}}},
+    [
+      {kind: 'triage', title: 'New.', path: 'projects/p/queue/new.md'},
+      {kind: 'triage', title: 'Newer.', path: 'projects/p/queue/newer.md'}
+    ]
+  );
+  const text = digestOf(
+    inputs({owed, logBody: '## Open\n\n* In the Inbox: New.\n+ In the Inbox: Newer.\n'})
+  );
+  t.equal(text.split('In the Inbox: New.').length - 1, 1);
+  t.equal(text.split('In the Inbox: Newer.').length - 1, 1);
+});
+
 test('a Backlog with no plan shows its first items', t => {
   const items = Array.from({length: 12}, (_, i) => ({title: `Later ${i}.`, section: 'backlog'}));
   const text = digestOf(inputs({items}));

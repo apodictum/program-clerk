@@ -21,10 +21,13 @@ const styledInline = text =>
 
 const LABEL = /^[A-Z][^:]*:$/;
 
+/** A Markdown list item's marker: a log written by hand may use any of the three. */
+export const BULLET = /^[-*+]\s+/;
+
 const styledLine = line => {
   if (line.startsWith('# ')) return `\x1b[1;38;5;75m${line.slice(2)}\x1b[0m`;
   if (line.startsWith('## ')) return `\x1b[1;38;5;252m${line.slice(3)}\x1b[0m`;
-  if (line.startsWith('- ')) return ` • ${styledInline(line.slice(2))}`;
+  if (BULLET.test(line)) return ` • ${styledInline(line.replace(BULLET, ''))}`;
   if (LABEL.test(line)) return `\x1b[3m${line}\x1b[23m`;
   return styledInline(line);
 };

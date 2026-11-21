@@ -2,7 +2,7 @@
 // outside items by title, and the notes changed since. Pure: the run gathers, this writes.
 
 import {ciText} from './brief.mjs';
-import {withoutControls} from './style.mjs';
+import {BULLET, withoutControls} from './style.mjs';
 
 const BACKLOG_SHOWN = 10;
 const THREADS_SHOWN = 20;
@@ -200,12 +200,14 @@ const openLines = ({project: p, owed, logBody, drift}) => {
       open
     );
   }
-  const logged = new Set(open === null ? [] : open.split(/\r?\n/).map(line => line.trim()));
+  const logged = new Set(
+    open === null ? [] : open.split(/\r?\n/).map(line => line.trim().replace(BULLET, ''))
+  );
   for (const entry of owed) {
     const label = OPEN_KINDS[entry.kind];
     if (label === undefined) continue;
-    const line = `- ${label}: ${entry.why}`;
-    if (!logged.has(line)) lines.push(line);
+    const item = `${label}: ${entry.why}`;
+    if (!logged.has(item)) lines.push(`- ${item}`);
   }
   for (const notice of p.notices) {
     lines.push(`- ${notice.by.title ?? notice.by.file_path} ${notice.type} ${notice.file}`);
