@@ -9,6 +9,10 @@ const THREADS_SHOWN = 20;
 const CHANGES_SHOWN = 15;
 const FIRST_LINE_MAX = 120;
 const LAST_MESSAGE_CHARS = 1500;
+const WRONG_SHOWN = 10;
+const VERDICT_NOTE_SHOWN = 200;
+/** How many of the account's draws `/pickup` reads, the newest first. */
+export const DRAWS_READ = 100;
 // A session often ends on a farewell, which says nothing about where it stopped.
 const SUBSTANTIAL_CHARS = 200;
 const FROM_OUTSIDE =
@@ -152,6 +156,7 @@ const upcomingLines = ({items, owed, plans, next}) => {
 const OPEN_KINDS = {
   handoff: 'A handoff waiting',
   rework: 'Your handoff came back',
+  wrong: 'Marked wrong in a draw',
   upstream: 'Mirrors a ticket',
   triage: 'In the Inbox',
   'fix-trackers': 'Trackers malformed'
@@ -163,11 +168,45 @@ const itemWhy = {
   place: i => i.title
 };
 
+const oneLine = (text, max) => {
+  const line = text.replace(/\s+/g, ' ').trim();
+  return line.length > max ? `${line.slice(0, max)}…` : line;
+};
+
+const wrongWhy = v => {
+  // The window removes an old version's writer with it.
+  const written = v.at === null ? '' : `, written ${day(v.at)} by ${v.keyName}`;
+  const note = v.note ? `: ${oneLine(v.note, VERDICT_NOTE_SHOWN)}` : '';
+  return `${v.path}${written}, marked ${day(v.decidedAt)} by ${v.decidedBy}${note}`;
+};
+
 /**
- * Each thing waiting on someone, in the order the digest lists them: the project's handoffs, then
- * its queue's owed items (`owedFrom`), then a malformed tracker declaration.
+ * The versions a person marked `wrong` in the account's draws and has not marked fixed, the newest
+ * draw first, as lines waiting on someone: an agent fixes the note, and the person marks it fixed.
+ * `draws` is null when the server has no draws to read.
  */
-export const owedOf = (bundle, items = []) => {
+const wrongsOf = draws => {
+  if (draws === null) return [];
+  // A server before the fixed mark sends no `fixedAt`, so every wrong one shows.
+  const wrongs = draws
+    .flatMap(draw => draw.versions)
+    .filter(v => v.verdict === 'wrong' && !v.fixedAt);
+  const owed = wrongs.slice(0, WRONG_SHOWN).map(v => ({kind: 'wrong', why: wrongWhy(v)}));
+  if (wrongs.length > WRONG_SHOWN) {
+    owed.push({kind: 'wrong', why: `${wrongs.length - WRONG_SHOWN} more, on the draw page`});
+  }
+  if (draws.length >= DRAWS_READ) {
+    owed.push({kind: 'wrong', why: `only the newest ${DRAWS_READ} draws were read`});
+  }
+  return owed;
+};
+
+/**
+ * Each thing waiting on someone, in the order the digest lists them: the project's handoffs, the
+ * account's versions marked wrong in a draw, its queue's owed items (`owedFrom`), then a malformed
+ * tracker declaration.
+ */
+export const owedOf = (bundle, items = [], draws = null) => {
   const p = bundle.project;
   if (p === null) return [];
   const owed = [];
@@ -180,6 +219,7 @@ export const owedOf = (bundle, items = []) => {
   for (const h of p.handoffs.returned) {
     owed.push({kind: 'rework', why: `a ${h.kind} to ${h.to}, returned ${h.updated}`});
   }
+  owed.push(...wrongsOf(draws));
   for (const i of items) owed.push({kind: i.kind, why: itemWhy[i.kind](i)});
   if (p.trackers.problems.length > 0) {
     owed.push({kind: 'fix-trackers', why: p.trackers.problems.join('; ')});

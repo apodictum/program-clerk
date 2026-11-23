@@ -318,6 +318,84 @@ test('an owed line the last log carries under another bullet shows once', t => {
   t.equal(text.split('In the Inbox: Newer.').length - 1, 1);
 });
 
+const EMPTY_BUNDLE = {
+  project: {name: 'p', handoffs: {open: [], returned: []}, trackers: {problems: []}}
+};
+
+const versionOf = (extra = {}) => ({
+  versionId: 7,
+  recordId: 'r7',
+  path: 'topics/seven.md',
+  at: '2026-11-21T10:00:00Z',
+  keyName: 'desk agent',
+  verdict: 'wrong',
+  note: 'The date\nis off.',
+  decidedAt: '2026-11-22T23:05:00Z',
+  decidedBy: 'Dana',
+  fixedAt: null,
+  fixedBy: null,
+  ...extra
+});
+
+test('a version marked wrong in a draw and not marked fixed is open, on one line', t => {
+  const draws = [
+    {
+      id: 'd2',
+      versions: [
+        versionOf(),
+        versionOf({versionId: 8, path: 'topics/fixed.md', fixedAt: '2026-11-23T01:00:00Z'}),
+        versionOf({versionId: 9, path: 'topics/fine.md', verdict: 'confirmed'}),
+        versionOf({versionId: 10, path: 'topics/open.md', verdict: null, decidedAt: null})
+      ]
+    },
+    {
+      id: 'd1',
+      versions: [
+        versionOf({versionId: 3, path: 'topics/old.md', at: null, keyName: null, note: null})
+      ]
+    }
+  ];
+  const text = digestOf(inputs({owed: owedOf(EMPTY_BUNDLE, [], draws)}));
+  t.ok(
+    text.includes(
+      '\n- Marked wrong in a draw: topics/seven.md, written 2026-11-21 by desk agent, marked 2026-11-22 by Dana: The date is off.\n' +
+        '- Marked wrong in a draw: topics/old.md, marked 2026-11-22 by Dana'
+    ),
+    'the newest draw first, its note on one line, a version past the window without its writer'
+  );
+  for (const path of ['topics/fixed.md', 'topics/fine.md', 'topics/open.md']) {
+    t.notOk(text.includes(path), `${path}: fixed, confirmed, or undecided`);
+  }
+});
+
+test('the wrong versions are capped, and so are the draws read', t => {
+  const many = Array.from({length: 12}, (_, i) =>
+    versionOf({versionId: i, path: `topics/w${i}.md`, note: 'x'.repeat(300)})
+  );
+  const text = digestOf(inputs({owed: owedOf(EMPTY_BUNDLE, [], [{id: 'd', versions: many}])}));
+  t.ok(text.includes('topics/w9.md'));
+  t.notOk(text.includes('topics/w10.md'));
+  t.ok(text.includes('- Marked wrong in a draw: 2 more, on the draw page'));
+  t.ok(text.includes(`: ${'x'.repeat(200)}…\n`), 'a long note cut');
+  const full = Array.from({length: 100}, (_, i) => ({id: `d${i}`, versions: []}));
+  t.ok(
+    digestOf(inputs({owed: owedOf(EMPTY_BUNDLE, [], full)})).includes(
+      '- Marked wrong in a draw: only the newest 100 draws were read'
+    ),
+    'a full read says older draws went unread'
+  );
+  t.notOk(
+    digestOf(inputs({owed: owedOf(EMPTY_BUNDLE, [], null)})).includes('Marked wrong'),
+    'nothing when the server has no draws'
+  );
+});
+
+test('a server before the fixed mark shows every wrong version', t => {
+  const {fixedAt, fixedBy, ...older} = versionOf();
+  const text = digestOf(inputs({owed: owedOf(EMPTY_BUNDLE, [], [{id: 'd', versions: [older]}])}));
+  t.ok(text.includes('Marked wrong in a draw: topics/seven.md'));
+});
+
 test('a Backlog with no plan shows its first items', t => {
   const items = Array.from({length: 12}, (_, i) => ({title: `Later ${i}.`, section: 'backlog'}));
   const text = digestOf(inputs({items}));

@@ -18,11 +18,12 @@ const STATE = {
   stalls: null
 };
 
-const withRepo = async fn => {
+const withRepo = async (fn, routes = {}) => {
   const home = scratch();
   const server = await fakeServer({
     'POST /system/resume-project': {body: STATE},
-    'POST /notes/query': {body: {items: []}}
+    'POST /notes/query': {body: {items: []}},
+    ...routes
   });
   try {
     await fn({home, server, repo: makeRepo(join(home, 'p'), null)});
@@ -74,4 +75,67 @@ test('/pickup with no key or no server says nothing, so the skill runs the scrip
     const dead = hookEnv(home, 'http://127.0.0.1:9');
     t.equal((await runHook('digest.mjs', payload, dead)).stdout, '');
   });
+});
+
+test('/pickup lists a version marked wrong in a draw, and says nothing of a server without draws', async t => {
+  const draws = {
+    draws: [
+      {
+        id: 'd1',
+        drawnAt: '2026-11-22T23:00:00Z',
+        drawnBy: 'Dana',
+        versions: [
+          {
+            versionId: 7,
+            recordId: 'r7',
+            path: 'topics/seven.md',
+            at: '2026-11-21T10:00:00Z',
+            keyName: 'desk agent',
+            verdict: 'wrong',
+            note: 'The date is off.',
+            decidedAt: '2026-11-22T23:05:00Z',
+            decidedBy: 'Dana',
+            fixedAt: null,
+            fixedBy: null
+          }
+        ]
+      }
+    ]
+  };
+  const payload = repo => ({prompt: '/pickup', session_id: 's1', cwd: repo});
+  await withRepo(
+    async ({home, server, repo}) => {
+      const r = await runHook('digest.mjs', payload(repo), hookEnv(home, server.base));
+      const context = JSON.parse(r.stdout).hookSpecificOutput.additionalContext;
+      t.ok(
+        context.includes(
+          '- Marked wrong in a draw: topics/seven.md, written 2026-11-21 by desk agent, marked 2026-11-22 by Dana: The date is off.'
+        )
+      );
+      t.ok(
+        server.requests.some(req => req.url === '/draws?limit=100'),
+        'the newest draws read'
+      );
+    },
+    {'GET /draws': {body: draws}}
+  );
+  for (const [status, routes] of [
+    [404, {}],
+    [501, {'GET /draws': {status: 501, body: {code: 'not_supported'}}}]
+  ]) {
+    await withRepo(async ({home, server, repo}) => {
+      const r = await runHook('digest.mjs', payload(repo), hookEnv(home, server.base));
+      const context = JSON.parse(r.stdout).hookSpecificOutput.additionalContext;
+      t.notOk(context.includes('Marked wrong'), `a ${status}: no line`);
+      t.notOk(context.includes('The draws could not be read'), 'and no problem');
+    }, routes);
+  }
+  await withRepo(
+    async ({home, server, repo}) => {
+      const r = await runHook('digest.mjs', payload(repo), hookEnv(home, server.base));
+      const context = JSON.parse(r.stdout).hookSpecificOutput.additionalContext;
+      t.ok(context.includes('The draws could not be read: the draws: 500'), 'a 500 is a problem');
+    },
+    {'GET /draws': {status: 500, body: {code: 'broken'}}}
+  );
 });

@@ -11,7 +11,7 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {refusedKeyLine} from './brief.mjs';
 import {projectOf, topOf} from './checkout.mjs';
 import {cacheDir, connectionOf, fileSafe, shortHost, transcriptsDirOf} from './common.mjs';
-import {digestOf, intakeOf, lastMessageOf, laterThanLog, newestOf} from './digest.mjs';
+import {DRAWS_READ, digestOf, intakeOf, lastMessageOf, laterThanLog, newestOf} from './digest.mjs';
 import {owedOf, threadsToFile} from './digest.mjs';
 import {driftReport} from './drift.mjs';
 import * as github from './github.mjs';
@@ -285,6 +285,10 @@ const lastMessageOfUnlogged = (p, cwd, env) => {
   }
 };
 
+// A server without the draw, or one on SQLite, has none to read.
+const drawsOf = answer =>
+  answer?.status === 404 || answer?.status === 501 ? null : expectJson(answer, 'the draws').draws;
+
 const driftOf = async (api, top, project) => {
   if (!top) return {problem: 'not inside a git checkout'};
   try {
@@ -355,7 +359,7 @@ export const digestRun = async ({
           gh
         })
   );
-  const [state, queue, plansFolder, drift, githubPart] = await Promise.all([
+  const [state, queue, plansFolder, drift, githubPart, draws] = await Promise.all([
     statePromise,
     queuePromise,
     orElse(
@@ -366,7 +370,8 @@ export const digestRun = async ({
       'The plans'
     ),
     driftOf(api, top, project),
-    githubPromise
+    githubPromise,
+    orElse(api(`/draws?limit=${DRAWS_READ}`).then(drawsOf), null, 'The draws')
   ]);
   const p = state.project;
   const trackers = queue?.trackers ?? {trackers: [], problems: []};
@@ -388,7 +393,7 @@ export const digestRun = async ({
     project,
     bundle,
     items: queue === null ? null : itemsFrom(queue.notes),
-    owed: owedOf(bundle, owedItems),
+    owed: owedOf(bundle, owedItems, draws),
     plans,
     logBody,
     lastMessage: p?.found ? lastMessageOfUnlogged(p, cwd, env) : null,

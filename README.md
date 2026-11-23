@@ -82,9 +82,10 @@ command of the same name. The digest's sections:
   with no log of its own.
 - **Upcoming:** the log's next steps, the queue's Active items, the plan or the first Backlog items,
   and what entered the Backlog since the last session.
-- **Open:** the log's open questions, handoffs waiting, items that mirror a ticket, the Inbox, and
-  the checkout's drift: commits, tags, and npm publishes since its baseline, unpushed commits, the
-  working tree, and git tags without a publish.
+- **Open:** the log's open questions, handoffs waiting, each version a person marked wrong in a draw
+  and has not marked fixed (the account's, read from its newest 100 draws), items that mirror a
+  ticket, the Inbox, and the checkout's drift: commits, tags, and npm publishes since its baseline,
+  unpushed commits, the working tree, and git tags without a publish.
 - **Outside:** the project's trackers, and for its GitHub repository the last CI result, what moved
   since the last look, and each open thread's title.
 - **Changed since the last session:** the notes written since, by title.
