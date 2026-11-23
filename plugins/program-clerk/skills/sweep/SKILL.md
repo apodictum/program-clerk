@@ -70,8 +70,13 @@ each claims its own batch under its holder, so their batches never overlap.
    section of the named pieces once; keep each existing topic's name; read the note with `read_file`
    and `include_etag`, and send `split` with `expected_etag`, reading again and retrying once on a
    412; never `join` a note to regroup it, since a join deletes every piece with its history and
-   summary; report the answer's `pieces`, `removed`, and `oversized`. A section past 20 KB by itself
-   stays in `oversized`, for the person.
+   summary; report the answer's `pieces`, `removed`, and `oversized`.
+
+   A section past 20 KB by itself, in `oversized` or in a note no split can cut, gets a remedy that
+   drops no fact, made by you after the agents report: a trim of repeated wording, or the rule its
+   own folder names (a plan's shipped arc shrinks to one line naming its decision and commit). A
+   lessons piece is the person's: a reorganization drops lessons by design, so the summary asks
+   whether to reorganize it, naming the piece and its size.
 
 1. **`begin`.** Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/sweep/sweep.mjs" begin` with the person's
    options. It runs the one-shots and prints the first plan, with `state`, the state file's path.
@@ -104,8 +109,9 @@ each claims its own batch under its holder, so their batches never overlap.
      says `repaired: true`. A removal stated only as a count is one nobody can trace later.
    - `lint`: when its `ok` is false, each check in `failing` with its count and samples, since the
      sweep drains none of them.
-   - `size_bound`, `ungrouped_pieces`, and `small_splits`: the notes step 0 left past their bound,
-     with appended pieces, or split into pieces under half their bound. Name each; join none, which
+   - `size_bound`, `ungrouped_pieces`, and `small_splits`: the notes step 0 trimmed, and those it
+     left past their bound, with appended pieces, or split into pieces under half their bound. Name
+     each; a note left for the person carries its remedy and the question it needs. Join none, which
      is the person's call.
    - Each note step 0 split or regrouped, and each piece a regroup removed.
 
