@@ -20,6 +20,10 @@ put each thing worth keeping where the next session reads it:
 
 - A rule the person gave for how to work on the project goes to `projects/<project>/feedback.md`,
   with why and how to apply it.
+- A rule the person meant for every project, or a way of working not tied to this one, goes where
+  every session reads it: in Claude Code, a line in the person's `~/.claude/CLAUDE.md`. The wrap's
+  report proposes the line, and it is written on the person's word; a topic note can hold the long
+  form.
 - A decision and its reasons go to `projects/<project>/decisions.md`, appended as a section of its
   own.
 - A lesson about the code or the tools goes to `projects/<project>/learnings.md`, a fact about the
@@ -65,7 +69,8 @@ commits as moved.
 
 ## 3. Report
 
-In a few lines: the notes touched, the log's path, and whether the state was recorded.
+In a few lines: the notes touched, the log's path, whether the state was recorded, and any line
+proposed for the person's `~/.claude/CLAUDE.md`, word for word.
 
 ## When to wrap
 
