@@ -35,6 +35,10 @@ running `/ingest` again resumes.
 1. **Read** the note with `read_file` and `include_etag`, and keep its etag for step 7.
 2. **Extract** its concepts and put each where it belongs:
    - A pattern or fact that holds across projects goes to a topic note under `topics/`.
+   - A rule the person meant for every project, or a way of working not tied to one, goes where
+     every session reads it: in Claude Code, a line in the person's `~/.claude/CLAUDE.md`. The
+     report proposes the line, and it is written on the person's word; a topic note can hold the
+     long form.
    - What belongs to one project goes to a note under `projects/<project>/`.
    - Work that waits goes on the project's queue, with the `queue` skill.
 
@@ -76,5 +80,5 @@ token, or let it lapse.
 
 ## 5. Report
 
-In a few lines: each source and the notes derived from it, each note skipped as held, and the count
-of drafts still waiting.
+In a few lines: each source and the notes derived from it, each note skipped as held, the count of
+drafts still waiting, and any line proposed for the person's `~/.claude/CLAUDE.md`, word for word.
