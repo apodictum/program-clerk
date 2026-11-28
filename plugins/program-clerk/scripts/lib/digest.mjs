@@ -324,10 +324,20 @@ const digestText = ({
   lastMessage,
   drift,
   github,
-  problems = []
+  problems = [],
+  deletions = []
 }) => {
   const p = bundle.project;
-  if (!p.found) return `# ${project}\n\nProgram Clerk holds nothing for this project yet.`;
+  // Last, where the end of the output keeps it in view (apodictum-web D98).
+  const deletion = titled('This account is to be deleted', deletions);
+  if (!p.found) {
+    return [
+      `# ${project}`,
+      '',
+      'Program Clerk holds nothing for this project yet.',
+      ...deletion
+    ].join('\n');
+  }
   const {lines: finished, next} = finishedLines({project: p, logBody, lastMessage});
   return [
     `# ${project}`,
@@ -335,9 +345,19 @@ const digestText = ({
     ...titled('Upcoming', upcomingLines({items: items ?? [], owed, plans, next})),
     ...titled('Open', [...problems, ...openLines({project: p, owed, logBody, drift})]),
     ...titled('Outside', externalLines({project: p, github})),
-    ...titled('Changed since the last session', changeLines(p))
+    ...titled('Changed since the last session', changeLines(p)),
+    ...deletion
   ].join('\n');
 };
+
+/**
+ * The account's deletion an admin asked for, from `/system/notices` (the server's `deletion-`
+ * notices), each its text; none from a server before them.
+ */
+export const deletionsOf = notices =>
+  (Array.isArray(notices) ? notices : [])
+    .filter(n => typeof n?.id === 'string' && n.id.startsWith('deletion-'))
+    .map(n => String(n.text));
 
 /** The digest, from everything the run gathered. */
 export const digestOf = gathered => withoutControls(digestText(gathered));

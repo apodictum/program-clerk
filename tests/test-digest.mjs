@@ -2,6 +2,7 @@
 
 import test from 'tape-six';
 import {
+  deletionsOf,
   digestOf,
   intakeOf,
   lastMessageOf,
@@ -175,6 +176,33 @@ test('a quiet project reads how it finished, and no empty section', t => {
 test('a project the account does not hold says so', t => {
   const text = digestOf(inputs({bundle: {project: {found: false}}}));
   t.equal(text, '# p\n\nProgram Clerk holds nothing for this project yet.');
+});
+
+test("the account's deletion is the digest's last section, whether or not the project is held (apodictum-web D98)", t => {
+  const deletions = ['An admin asked to delete this account.'];
+  t.ok(
+    digestOf(inputs({deletions})).endsWith(
+      '\n\n## This account is to be deleted\nAn admin asked to delete this account.'
+    ),
+    'after every other section'
+  );
+  t.equal(
+    digestOf(inputs({bundle: {project: {found: false}}, deletions})),
+    '# p\n\nProgram Clerk holds nothing for this project yet.\n\n## This account is to be deleted\nAn admin asked to delete this account.'
+  );
+});
+
+test("deletionsOf: the server's deletion notices' texts, none from anything else", t => {
+  t.deepEqual(
+    deletionsOf([
+      {id: 'deletion-2026-12-27T14:00:00Z', text: 'Deleted at noon.'},
+      {id: 'storage-near', text: 'Near the limit.'},
+      {text: 'No id.'}
+    ]),
+    ['Deleted at noon.']
+  );
+  t.deepEqual(deletionsOf(null), []);
+  t.deepEqual(deletionsOf({}), []);
 });
 
 test('every section the digest owes, in order, from the log, the queue, and GitHub', t => {

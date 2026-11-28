@@ -139,3 +139,49 @@ test('/pickup lists a version marked wrong in a draw, and says nothing of a serv
     {'GET /draws': {status: 500, body: {code: 'broken'}}}
   );
 });
+
+test("/pickup ends with the account's deletion an admin asked for, and says nothing of it when none waits (apodictum-web D98)", async t => {
+  const deletion =
+    'An admin asked to delete this account: it is deleted at 2026-12-27 14:00 UTC and is read-only until then. An admin can stop the deletion at https://accounts.apodictum.com/';
+  const payload = repo => ({prompt: '/pickup', session_id: 's1', cwd: repo});
+  await withRepo(
+    async ({home, server, repo}) => {
+      const r = await runHook('digest.mjs', payload(repo), hookEnv(home, server.base));
+      const out = JSON.parse(r.stdout);
+      t.matchString(
+        out.systemMessage,
+        new RegExp(
+          `This account is to be deleted\\S*\\n${deletion.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}$`
+        ),
+        'the last section, on the screen'
+      );
+      const context = out.hookSpecificOutput.additionalContext;
+      t.ok(
+        context.includes(`## This account is to be deleted\n${deletion}\n</pc-digest-`),
+        'and last in the context'
+      );
+      t.notOk(context.includes('An upgrade'), "the operator's notices stay the session hooks'");
+    },
+    {
+      'GET /system/notices': {
+        body: {
+          notices: [
+            {id: 'deletion-2026-12-27T14:00:00.000Z', text: deletion, minutes: null},
+            {id: 'op', text: 'An upgrade', starts_at: '2026-12-01T10:00:00Z', minutes: 30}
+          ]
+        }
+      }
+    }
+  );
+  for (const [label, routes] of [
+    ['none waits', {'GET /system/notices': {body: {notices: []}}}],
+    ['a server with no notices', {}]
+  ]) {
+    await withRepo(async ({home, server, repo}) => {
+      const r = await runHook('digest.mjs', payload(repo), hookEnv(home, server.base));
+      const context = JSON.parse(r.stdout).hookSpecificOutput.additionalContext;
+      t.notOk(context.includes('to be deleted'), `${label}: no section`);
+      t.notOk(context.includes('The notices could not be read'), `${label}: and no problem`);
+    }, routes);
+  }
+});

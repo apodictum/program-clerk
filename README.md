@@ -89,6 +89,8 @@ command of the same name. The digest's sections:
 - **Outside:** the project's trackers, and for its GitHub repository the last CI result, what moved
   since the last look, and each open thread's title.
 - **Changed since the last session:** the notes written since, by title.
+- **This account is to be deleted:** when an admin asked the account system to delete the account,
+  when it runs and where an admin stops it, last so the end of the output keeps it in view.
 
 Reading GitHub needs the [`gh` command](https://cli.github.com/) signed in; without it, the digest
 says so and shows the last stored view. A new issue, pull request, or discussion a person opened,

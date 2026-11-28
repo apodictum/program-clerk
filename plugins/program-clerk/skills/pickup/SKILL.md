@@ -53,6 +53,8 @@ not read.
 - Report a line that names a problem, such as `gh` missing or signed out, or a private repository
   the project does not track. When the script exits non-zero, say what it printed: with no key in
   your shell, ask the person to type `/pickup`, whose hook has the key.
+- When the digest ends with "This account is to be deleted", end the reply with it: when the
+  deletion runs, and where an admin stops it.
 
 ## What it changes
 

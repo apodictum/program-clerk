@@ -12,10 +12,10 @@ import {refusedKeyLine} from './brief.mjs';
 import {projectOf, topOf} from './checkout.mjs';
 import {cacheDir, connectionOf, fileSafe, shortHost, transcriptsDirOf} from './common.mjs';
 import {DRAWS_READ, digestOf, intakeOf, lastMessageOf, laterThanLog, newestOf} from './digest.mjs';
-import {owedOf, threadsToFile} from './digest.mjs';
+import {deletionsOf, owedOf, threadsToFile} from './digest.mjs';
 import {driftReport} from './drift.mjs';
 import * as github from './github.mjs';
-import {request} from './http.mjs';
+import {jsonOf, request} from './http.mjs';
 import {expectJson, fileItem, githubRefs, itemsFrom, owedFrom, queueOf} from './queue.mjs';
 import {styledOf} from './style.mjs';
 
@@ -359,7 +359,7 @@ export const digestRun = async ({
           gh
         })
   );
-  const [state, queue, plansFolder, drift, githubPart, draws] = await Promise.all([
+  const [state, queue, plansFolder, drift, githubPart, draws, notices] = await Promise.all([
     statePromise,
     queuePromise,
     orElse(
@@ -371,7 +371,15 @@ export const digestRun = async ({
     ),
     driftOf(api, top, project),
     githubPromise,
-    orElse(api(`/draws?limit=${DRAWS_READ}`).then(drawsOf), null, 'The draws')
+    orElse(api(`/draws?limit=${DRAWS_READ}`).then(drawsOf), null, 'The draws'),
+    // A server with no notices answers none.
+    orElse(
+      api('/system/notices').then(answer =>
+        answer?.status === 200 ? (jsonOf(answer.text)?.notices ?? null) : null
+      ),
+      null,
+      'The notices'
+    )
   ]);
   const p = state.project;
   const trackers = queue?.trackers ?? {trackers: [], problems: []};
@@ -399,7 +407,8 @@ export const digestRun = async ({
     lastMessage: p?.found ? lastMessageOfUnlogged(p, cwd, env) : null,
     drift,
     github: githubPart,
-    problems: [...problems]
+    problems: [...problems],
+    deletions: deletionsOf(notices)
   });
   return {digest, styled: styledOf(digest)};
 };
